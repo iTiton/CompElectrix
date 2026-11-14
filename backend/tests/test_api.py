@@ -94,3 +94,17 @@ def test_credenciales_no_se_guardan(monkeypatch, caplog):
     with Session(engine) as s:
         assert not [a for a in s.exec(select(Ajuste)) if "secreta" in a.valor]
     assert "secreta" not in caplog.text
+
+
+def test_prefijo_del_proxy():
+    from starlette.requests import Request
+
+    from app.main import prefijo
+
+    def req(valor):
+        return Request({"type": "http", "headers": [(b"x-forwarded-prefix", valor.encode())]})
+
+    assert prefijo(req("/compelectrix")) == "/compelectrix"
+    assert prefijo(req("/herramientas/compelectrix/")) == "/herramientas/compelectrix"
+    assert prefijo(req('/x"><script>')) == ""
+    assert prefijo(req("")) == ""

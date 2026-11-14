@@ -1,5 +1,6 @@
 import { X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { urlApi } from "../api";
 
 export const eur = (v: number | null | undefined, dec = 2) =>
   v == null ? "—" : v.toLocaleString("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -91,7 +92,7 @@ export function useDatos<T>(ruta: string | null, deps: unknown[] = [], eventos: 
   useEffect(() => {
     if (!ruta) return;
     let vivo = true;
-    fetch(`/api${ruta}`)
+    fetch(urlApi(ruta))
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Error ${r.status}`))))
       .then((d) => vivo && (setDatos(d), setError(null)))
       .catch((e) => vivo && setError(e.message));

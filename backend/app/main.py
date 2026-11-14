@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import os
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import router
@@ -34,9 +35,24 @@ app.include_router(router)
 if FRONTEND_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
 
+    INDEX = (FRONTEND_DIR / "index.html").read_text(encoding="utf-8")
+
     @app.get("/{ruta:path}", include_in_schema=False)
-    def spa(ruta: str):
+    def spa(ruta: str, request: Request):
         fichero = (FRONTEND_DIR / ruta).resolve()
         if ruta and fichero.is_file() and FRONTEND_DIR.resolve() in fichero.parents:
             return FileResponse(fichero)
-        return FileResponse(FRONTEND_DIR / "index.html")
+        return HTMLResponse(INDEX.replace('<base href="/" />', f'<base href="{prefijo(request)}/" />', 1))
+
+
+PREFIJO_VALIDO = re.compile(r"^(/[A-Za-z0-9._~-]+)+$")
+
+
+def prefijo(request: Request) -> str:
+    """Ruta bajo la que la publica un proxy (p. ej. el portal: /compelectrix). Vacía si se accede directo.
+
+    El proxy recorta el prefijo antes de reenviar y lo indica en la cabecera estándar
+    X-Forwarded-Prefix; la interfaz lo recibe como <base href> y construye todo en relativo.
+    """
+    p = request.headers.get("x-forwarded-prefix", "").rstrip("/")
+    return p if PREFIJO_VALIDO.match(p) else ""

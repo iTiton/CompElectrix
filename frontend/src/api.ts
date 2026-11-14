@@ -137,8 +137,14 @@ export interface Comparativa {
   avisos: string[];
 }
 
+/** URL de la API relativa al <base href> de la página, para funcionar también bajo una subruta. */
+export const urlApi = (ruta: string) => new URL(`api${ruta}`, document.baseURI).toString();
+
+/** Ruta base para el enrutador ("/" o "/compelectrix"). */
+export const rutaBase = () => new URL(document.baseURI).pathname.replace(/\/$/, "") || "/";
+
 async function peticion<T>(metodo: string, ruta: string, cuerpo?: unknown): Promise<T> {
-  const r = await fetch(`/api${ruta}`, {
+  const r = await fetch(urlApi(ruta), {
     method: metodo,
     headers: cuerpo ? { "Content-Type": "application/json" } : undefined,
     body: cuerpo ? JSON.stringify(cuerpo) : undefined,

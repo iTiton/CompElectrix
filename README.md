@@ -86,6 +86,15 @@ solo trabaja cuando la usas. Tiene un límite de
 256 MB de memoria y un núcleo, así que nunca acapara la Raspberry. Los registros se limitan para no gastar
 la tarjeta SD.
 
+### Publicarla en una subruta (detrás de un portal o proxy)
+
+CompElectrix puede vivir en una subruta, por ejemplo `https://raspberry/compelectrix/`. El proxy debe:
+
+1. Recortar el prefijo antes de reenviar (`/compelectrix/api/salud` → `/api/salud`).
+2. Indicarlo en la cabecera `X-Forwarded-Prefix: /compelectrix`.
+
+La interfaz construye entonces todas sus direcciones relativas a esa ruta. Sin la cabecera funciona igual en la raíz.
+
 ### Página de inicio con varias herramientas
 
 El `docker-compose.yml` incluye etiquetas para [Homepage](https://gethomepage.dev). Si lo usas, CompElectrix
