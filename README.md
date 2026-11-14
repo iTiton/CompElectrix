@@ -134,9 +134,8 @@ En cada domicilio, la sección **Consumo horario** tiene tres formas de traer lo
    o de tu comercializadora. Se reconocen automáticamente los formatos habituales.
 2. **Datadis**: el portal oficial y gratuito de las distribuidoras.
    - Regístrate en [datadis.es](https://datadis.es) con tu DNI.
-   - Pon tu usuario y tu contraseña en **Ajustes**.
-   - Elige el suministro y las fechas.
-3. **Octopus Energy**: con el email y la contraseña de tu área de cliente, que se guardan en **Ajustes**.
+   - Pulsa **Datadis** en el domicilio, entra con tu usuario y elige el suministro y las fechas.
+3. **Octopus Energy**: con el email y la contraseña de tu área de cliente.
 
 Después pulsa **Crear facturas de los meses sin factura** para completar los huecos. Esas facturas no tienen
 importe real, pero sirven para la comparativa.
@@ -144,8 +143,12 @@ importe real, pero sirven para la comparativa.
 > Las conexiones con Datadis y Octopus siguen su documentación y el esquema público de cada API, pero aún
 > no se han probado con una cuenta real. Si algo falla, el mensaje de error dirá qué ha pasado.
 
-Los usuarios y contraseñas se guardan **solo en tu servidor**, dentro de `data/`, sin cifrar. Protege esa carpeta
-y no la compartas.
+**Las contraseñas no se guardan nunca.** Se piden en un formulario normal de inicio de sesión, que tu gestor de
+contraseñas (1Password, Bitwarden, el del navegador…) puede rellenar. Se usan para esa importación y se descartan:
+no se escriben ni en la base de datos ni en los registros.
+
+> Entre tu navegador y la Raspberry viajan por tu red. Con Tailscale van cifradas. Por `http://` en la wifi de casa,
+> no. Para cifrarlas también ahí, la guía de despliegue (fase 6) añadirá HTTPS.
 
 ## Desarrollo
 

@@ -6,7 +6,7 @@ from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from sqlmodel import Session, SQLModel, delete, func, select
 
 from . import pvpc, servicios
@@ -324,51 +324,27 @@ def generar_facturas(id_: int, s: SessionDep):
     return servicios.generar_facturas_desde_consumo(s, _obtener(s, Domicilio, id_))
 
 
-# ==================================================================== Datadis
-class CredencialesDatadis(BaseModel):
-    usuario: str
-    clave: str | None = None  # vacía = conservar la guardada
+# ============================================== Datadis y Octopus (sin guardar credenciales)
+# Las credenciales llegan en cada petición desde el navegador (donde las rellena el gestor de
+# contraseñas), se usan para esa operación y se descartan: nunca se escriben en disco ni en logs.
+class Credenciales(BaseModel):
+    usuario: str = Field(min_length=1)
+    clave: SecretStr
+
+    def __repr__(self) -> str:  # por si alguna vez se registrara el objeto
+        return "Credenciales(***)"
 
 
-def _cliente_datadis(s: Session) -> ClienteDatadis:
-    u = pvpc.obtener_ajuste(s, "datadis_usuario")
-    c = pvpc.obtener_ajuste(s, "datadis_clave")
-    if not u or not c:
-        raise HTTPException(400, "Configura primero tu usuario y contraseña de Datadis en Ajustes.")
-    return ClienteDatadis(u, c)
-
-
-@router.get("/datadis")
-def ver_datadis(s: SessionDep):
-    return {
-        "usuario": pvpc.obtener_ajuste(s, "datadis_usuario"),
-        "tiene_clave": bool(pvpc.obtener_ajuste(s, "datadis_clave")),
-    }
-
-
-@router.put("/datadis")
-def guardar_datadis(p: CredencialesDatadis, s: SessionDep):
-    pvpc.guardar_ajuste(s, "datadis_usuario", p.usuario.strip().upper())
-    if p.clave:
-        pvpc.guardar_ajuste(s, "datadis_clave", p.clave)
-    return ver_datadis(s)
-
-
-@router.delete("/datadis", status_code=204)
-def borrar_datadis(s: SessionDep):
-    pvpc.guardar_ajuste(s, "datadis_usuario", None)
-    pvpc.guardar_ajuste(s, "datadis_clave", None)
-
-
-@router.get("/datadis/suministros")
-def suministros_datadis(s: SessionDep):
+@router.post("/datadis/suministros")
+def suministros_datadis(c: Credenciales):
     try:
-        return _cliente_datadis(s).suministros()
+        return ClienteDatadis(c.usuario.strip().upper(), c.clave.get_secret_value()).suministros()
     except ErrorDatadis as e:
         raise HTTPException(502, str(e)) from e
 
 
 class PeticionDatadis(BaseModel):
+    credenciales: Credenciales
     cups: str
     codigo_distribuidora: str
     tipo_punto: int | str = 5
@@ -379,8 +355,9 @@ class PeticionDatadis(BaseModel):
 @router.post("/domicilios/{id_}/consumo/datadis")
 def importar_datadis(id_: int, p: PeticionDatadis, s: SessionDep):
     _obtener(s, Domicilio, id_)
+    cliente = ClienteDatadis(p.credenciales.usuario.strip().upper(), p.credenciales.clave.get_secret_value())
     try:
-        registros = _cliente_datadis(s).consumos(p.cups, p.codigo_distribuidora, p.tipo_punto, p.desde, p.hasta)
+        registros = cliente.consumos(p.cups, p.codigo_distribuidora, p.tipo_punto, p.desde, p.hasta)
     except ErrorDatadis as e:
         raise HTTPException(502, str(e)) from e
     registros = [r for r in registros if p.desde <= r.fecha <= p.hasta]
@@ -391,51 +368,16 @@ def importar_datadis(id_: int, p: PeticionDatadis, s: SessionDep):
     return {"horas": n, "avisos": res.avisos}
 
 
-# ==================================================================== Octopus
-class CredencialesOctopus(BaseModel):
-    email: str
-    clave: str | None = None
-
-
-def _cliente_octopus(s: Session) -> ClienteOctopus:
-    e = pvpc.obtener_ajuste(s, "octopus_email")
-    c = pvpc.obtener_ajuste(s, "octopus_clave")
-    if not e or not c:
-        raise HTTPException(400, "Configura primero tu email y contraseña de Octopus en Ajustes.")
-    return ClienteOctopus(e, c)
-
-
-@router.get("/octopus")
-def ver_octopus(s: SessionDep):
-    return {
-        "email": pvpc.obtener_ajuste(s, "octopus_email"),
-        "tiene_clave": bool(pvpc.obtener_ajuste(s, "octopus_clave")),
-    }
-
-
-@router.put("/octopus")
-def guardar_octopus(p: CredencialesOctopus, s: SessionDep):
-    pvpc.guardar_ajuste(s, "octopus_email", p.email.strip())
-    if p.clave:
-        pvpc.guardar_ajuste(s, "octopus_clave", p.clave)
-    return ver_octopus(s)
-
-
-@router.delete("/octopus", status_code=204)
-def borrar_octopus(s: SessionDep):
-    pvpc.guardar_ajuste(s, "octopus_email", None)
-    pvpc.guardar_ajuste(s, "octopus_clave", None)
-
-
-@router.get("/octopus/suministros")
-def suministros_octopus(s: SessionDep):
+@router.post("/octopus/suministros")
+def suministros_octopus(c: Credenciales):
     try:
-        return _cliente_octopus(s).suministros()
+        return ClienteOctopus(c.usuario.strip(), c.clave.get_secret_value()).suministros()
     except ErrorOctopus as e:
         raise HTTPException(502, str(e)) from e
 
 
 class PeticionOctopus(BaseModel):
+    credenciales: Credenciales
     propiedad_id: str
     desde: date
     hasta: date
@@ -444,8 +386,9 @@ class PeticionOctopus(BaseModel):
 @router.post("/domicilios/{id_}/consumo/octopus")
 def importar_octopus(id_: int, p: PeticionOctopus, s: SessionDep):
     _obtener(s, Domicilio, id_)
+    cliente = ClienteOctopus(p.credenciales.usuario.strip(), p.credenciales.clave.get_secret_value())
     try:
-        horas = _cliente_octopus(s).consumos(p.propiedad_id, p.desde, p.hasta)
+        horas = cliente.consumos(p.propiedad_id, p.desde, p.hasta)
     except ErrorOctopus as e:
         raise HTTPException(502, str(e)) from e
     if not horas:

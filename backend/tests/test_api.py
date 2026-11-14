@@ -65,3 +65,32 @@ def test_flujo_completo():
         # no se puede borrar la tarifa actual
         assert c.delete(f"/api/tarifas/{cara}").status_code == 409
         assert c.delete(f"/api/domicilios/{dom}").status_code == 204
+
+
+def test_credenciales_no_se_guardan(monkeypatch, caplog):
+    from sqlmodel import Session, select
+
+    from app import api as modulo
+    from app.db import engine
+    from app.models import Ajuste
+
+    vistos = []
+
+    class Falso:
+        def __init__(self, usuario, clave):
+            vistos.append((usuario, clave))
+
+        def suministros(self):
+            return [{"cups": "ES1"}]
+
+    monkeypatch.setattr(modulo, "ClienteDatadis", Falso)
+    monkeypatch.setattr(modulo, "ClienteOctopus", Falso)
+    with TestClient(app) as c:
+        r = c.post("/api/datadis/suministros", json={"usuario": " 12345678z ", "clave": "secreta-1"})
+        assert r.json() == [{"cups": "ES1"}]
+        c.post("/api/octopus/suministros", json={"usuario": "yo@example.com", "clave": "secreta-2"})
+        assert vistos == [("12345678Z", "secreta-1"), ("yo@example.com", "secreta-2")]
+        assert c.post("/api/datadis/suministros", json={"usuario": "x"}).status_code == 422
+    with Session(engine) as s:
+        assert not [a for a in s.exec(select(Ajuste)) if "secreta" in a.valor]
+    assert "secreta" not in caplog.text

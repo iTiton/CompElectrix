@@ -1,5 +1,5 @@
-import { Activity, CloudDownload, FileUp, FilePlus2, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { Activity, CloudDownload, FileUp, FilePlus2, ShieldCheck, Trash2 } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
@@ -154,22 +154,53 @@ async function leerTexto(f: File): Promise<string> {
   return utf8.includes("�") ? new TextDecoder("windows-1252").decode(buf) : utf8;
 }
 
-function useListado<T>(ruta: string) {
-  const [lista, setLista] = useState<T[] | null>(null);
+interface Cred {
+  usuario: string;
+  clave: string;
+}
+
+/**
+ * Formulario de acceso estándar (usuario + contraseña con sus atributos `autocomplete`) para que
+ * 1Password, Bitwarden o el propio navegador lo rellenen. Nada se guarda en el servidor.
+ */
+function Acceso({ servicio, etiquetaUsuario, tipoUsuario, nombre, ayuda, enviar }: {
+  servicio: string; etiquetaUsuario: string; tipoUsuario: "text" | "email"; nombre: string; ayuda: string;
+  enviar: (c: Cred) => Promise<void>;
+}) {
+  const [usuario, setUsuario] = useState("");
+  const [clave, setClave] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [cargando, setCargando] = useState(false);
-  const cargar = async () => {
-    setCargando(true);
+  const [ocupado, setOcupado] = useState(false);
+  const alEnviar = async (e: FormEvent) => {
+    e.preventDefault();
+    setOcupado(true);
     setError(null);
     try {
-      setLista(await api.get<T[]>(ruta));
-    } catch (e) {
-      setError((e as Error).message);
+      await enviar({ usuario, clave });
+    } catch (err) {
+      setError((err as Error).message);
     } finally {
-      setCargando(false);
+      setOcupado(false);
     }
   };
-  return { lista, error, cargando, cargar };
+  return (
+    <form onSubmit={alEnviar} className="space-y-4" name={nombre} action="#" method="post">
+      <p className="text-sm text-zinc-500">{ayuda}</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Campo etiqueta={etiquetaUsuario}>
+          <input className="entrada" name={`${nombre}-usuario`} id={`${nombre}-usuario`} type={tipoUsuario} autoComplete="username" required value={usuario} onChange={(e) => setUsuario(e.target.value)} />
+        </Campo>
+        <Campo etiqueta="Contraseña">
+          <input className="entrada" name={`${nombre}-clave`} id={`${nombre}-clave`} type="password" autoComplete="current-password" required value={clave} onChange={(e) => setClave(e.target.value)} />
+        </Campo>
+      </div>
+      {error && <Aviso tipo="error">{error}</Aviso>}
+      <div className="flex items-center gap-2">
+        <button className="btn-primario" disabled={ocupado}>{ocupado ? "Conectando…" : `Entrar en ${servicio}`}</button>
+        <span className="ml-auto flex items-center gap-1 text-xs text-zinc-500"><ShieldCheck size={14} /> No se guarda: se usa solo para esta importación.</span>
+      </div>
+    </form>
+  );
 }
 
 function Fechas({ desde, hasta, setDesde, setHasta }: { desde: string; hasta: string; setDesde: (s: string) => void; setHasta: (s: string) => void }) {
@@ -181,115 +212,124 @@ function Fechas({ desde, hasta, setDesde, setHasta }: { desde: string; hasta: st
   );
 }
 
-function SinCredenciales({ servicio }: { servicio: string }) {
+function Opcion({ elegida, alElegir, children }: { elegida: boolean; alElegir: () => void; children: React.ReactNode }) {
   return (
-    <Aviso>
-      Primero guarda tus datos de acceso a {servicio} en <Link className="font-medium underline" to="/ajustes">Ajustes</Link>.
-    </Aviso>
+    <label className={`flex cursor-pointer gap-3 rounded-xl border p-3 text-sm ${elegida ? "border-acento-500 bg-acento-50 dark:bg-acento-700/15" : "border-zinc-200 dark:border-zinc-700"}`}>
+      <input type="radio" name="suministro" checked={elegida} onChange={alElegir} />
+      <span>{children}</span>
+    </label>
   );
 }
 
-function ImportarDatadis({ domicilio, cerrar, hecho }: { domicilio: Domicilio; cerrar: () => void; hecho: (r: ResultadoImportacion) => void }) {
-  const { datos: cred } = useDatos<{ usuario: string | null; tiene_clave: boolean }>("/datadis");
-  const sum = useListado<SuministroDatadis>("/datadis/suministros");
-  const [elegido, setElegido] = useState<SuministroDatadis | null>(null);
+/** Paso 2 común: elegir suministro, fechas e importar. */
+function useImportacion() {
   const [desde, setDesde] = useState(haceUnAnio());
   const [hasta, setHasta] = useState(ayer());
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-
-  if (cred && !cred.tiene_clave) return <SinCredenciales servicio="Datadis" />;
-
-  const importar = async () => {
-    if (!elegido) return;
+  const ejecutar = async (fn: () => Promise<void>) => {
     setOcupado(true);
     setError(null);
     try {
-      hecho(await api.post<ResultadoImportacion>(`/domicilios/${domicilio.id}/consumo/datadis`, {
-        cups: elegido.cups, codigo_distribuidora: elegido.codigo_distribuidora, tipo_punto: elegido.tipo_punto, desde, hasta,
-      }));
+      await fn();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setOcupado(false);
     }
   };
+  return { desde, hasta, setDesde, setHasta, error, ocupado, ejecutar };
+}
+
+function Pie({ cerrar, puede, ocupado, importar }: { cerrar: () => void; puede: boolean; ocupado: boolean; importar: () => void }) {
+  return (
+    <div className="flex justify-end gap-2">
+      <button className="btn-secundario" onClick={cerrar}>Cancelar</button>
+      <button className="btn-primario" disabled={!puede || ocupado} onClick={importar}>{ocupado ? "Descargando…" : "Importar"}</button>
+    </div>
+  );
+}
+
+function ImportarDatadis({ domicilio, cerrar, hecho }: { domicilio: Domicilio; cerrar: () => void; hecho: (r: ResultadoImportacion) => void }) {
+  const [cred, setCred] = useState<Cred | null>(null);
+  const [lista, setLista] = useState<SuministroDatadis[]>([]);
+  const [elegido, setElegido] = useState<SuministroDatadis | null>(null);
+  const imp = useImportacion();
+
+  if (!cred)
+    return (
+      <Acceso
+        servicio="Datadis" nombre="datadis" etiquetaUsuario="Usuario (NIF/NIE)" tipoUsuario="text"
+        ayuda="Tus datos de acceso a datadis.es. Si aún no tienes cuenta, regístrate gratis allí con tu DNI."
+        enviar={async (c) => {
+          const l = await api.post<SuministroDatadis[]>("/datadis/suministros", c);
+          setLista(l);
+          setElegido(l.find((s) => domicilio.cups && s.cups?.startsWith(domicilio.cups.slice(0, 20))) ?? null);
+          setCred(c);
+        }}
+      />
+    );
 
   return (
     <div className="space-y-4">
-      {!sum.lista && <button className="btn-primario" onClick={sum.cargar} disabled={sum.cargando}>{sum.cargando ? "Conectando…" : "Ver mis suministros"}</button>}
-      {sum.error && <Aviso tipo="error">{sum.error}</Aviso>}
-      {sum.lista && (
-        <div className="space-y-2">
-          {sum.lista.length === 0 && <p className="text-sm text-zinc-500">Datadis no muestra suministros para tu usuario.</p>}
-          {sum.lista.map((s) => (
-            <label key={s.cups} className={`flex cursor-pointer gap-3 rounded-xl border p-3 text-sm ${elegido?.cups === s.cups ? "border-acento-500 bg-acento-50 dark:bg-acento-700/15" : "border-zinc-200 dark:border-zinc-700"}`}>
-              <input type="radio" name="sum" checked={elegido?.cups === s.cups} onChange={() => setElegido(s)} />
-              <span>
-                <span className="font-mono text-xs">{s.cups}</span>
-                {domicilio.cups && s.cups?.startsWith(domicilio.cups.slice(0, 20)) && <span className="ml-2 rounded-full bg-acento-100 px-2 text-xs text-acento-700">este domicilio</span>}
-                <span className="block text-zinc-500">{s.direccion} · {s.distribuidora}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-      {elegido && <Fechas desde={desde} hasta={hasta} setDesde={setDesde} setHasta={setHasta} />}
-      {error && <Aviso tipo="error">{error}</Aviso>}
+      {lista.length === 0 && <p className="text-sm text-zinc-500">Datadis no muestra suministros para tu usuario.</p>}
+      {lista.map((s) => (
+        <Opcion key={s.cups} elegida={elegido?.cups === s.cups} alElegir={() => setElegido(s)}>
+          <span className="font-mono text-xs">{s.cups}</span>
+          {domicilio.cups && s.cups?.startsWith(domicilio.cups.slice(0, 20)) && <span className="ml-2 rounded-full bg-acento-100 px-2 text-xs text-acento-700">este domicilio</span>}
+          <span className="block text-zinc-500">{s.direccion} · {s.distribuidora}</span>
+        </Opcion>
+      ))}
+      {elegido && <Fechas {...imp} />}
+      {imp.error && <Aviso tipo="error">{imp.error}</Aviso>}
       <p className="text-xs text-zinc-500">Datadis limita las consultas diarias: pide periodos largos de una vez. Cada mes tarda unos segundos.</p>
-      <div className="flex justify-end gap-2">
-        <button className="btn-secundario" onClick={cerrar}>Cancelar</button>
-        <button className="btn-primario" disabled={!elegido || ocupado} onClick={importar}>{ocupado ? "Descargando…" : "Importar"}</button>
-      </div>
+      <Pie cerrar={cerrar} puede={!!elegido} ocupado={imp.ocupado} importar={() => imp.ejecutar(async () => {
+        hecho(await api.post<ResultadoImportacion>(`/domicilios/${domicilio.id}/consumo/datadis`, {
+          credenciales: cred, cups: elegido!.cups, codigo_distribuidora: elegido!.codigo_distribuidora,
+          tipo_punto: elegido!.tipo_punto, desde: imp.desde, hasta: imp.hasta,
+        }));
+      })} />
     </div>
   );
 }
 
 function ImportarOctopus({ domicilio, cerrar, hecho }: { domicilio: Domicilio; cerrar: () => void; hecho: (r: ResultadoImportacion) => void }) {
-  const { datos: cred } = useDatos<{ email: string | null; tiene_clave: boolean }>("/octopus");
-  const sum = useListado<SuministroOctopus>("/octopus/suministros");
+  const [cred, setCred] = useState<Cred | null>(null);
+  const [lista, setLista] = useState<SuministroOctopus[]>([]);
   const [elegido, setElegido] = useState<SuministroOctopus | null>(null);
-  const [desde, setDesde] = useState(haceUnAnio());
-  const [hasta, setHasta] = useState(ayer());
-  const [error, setError] = useState<string | null>(null);
-  const [ocupado, setOcupado] = useState(false);
+  const imp = useImportacion();
 
-  if (cred && !cred.tiene_clave) return <SinCredenciales servicio="Octopus" />;
-
-  const importar = async () => {
-    if (!elegido) return;
-    setOcupado(true);
-    setError(null);
-    try {
-      hecho(await api.post<ResultadoImportacion>(`/domicilios/${domicilio.id}/consumo/octopus`, { propiedad_id: elegido.propiedad_id, desde, hasta }));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setOcupado(false);
-    }
-  };
+  if (!cred)
+    return (
+      <Acceso
+        servicio="Octopus" nombre="octopus" etiquetaUsuario="Email" tipoUsuario="email"
+        ayuda="Los mismos datos con los que entras en la web o la app de Octopus Energy."
+        enviar={async (c) => {
+          const l = await api.post<SuministroOctopus[]>("/octopus/suministros", c);
+          setLista(l);
+          setElegido(l.find((s) => domicilio.cups && s.cups_luz.some((x) => x.startsWith(domicilio.cups!.slice(0, 20)))) ?? (l.length === 1 ? l[0] : null));
+          setCred(c);
+        }}
+      />
+    );
 
   return (
     <div className="space-y-4">
-      {!sum.lista && <button className="btn-primario" onClick={sum.cargar} disabled={sum.cargando}>{sum.cargando ? "Conectando…" : "Ver mis suministros"}</button>}
-      {sum.error && <Aviso tipo="error">{sum.error}</Aviso>}
-      {sum.lista?.map((s) => (
-        <label key={s.propiedad_id} className={`flex cursor-pointer gap-3 rounded-xl border p-3 text-sm ${elegido?.propiedad_id === s.propiedad_id ? "border-acento-500 bg-acento-50 dark:bg-acento-700/15" : "border-zinc-200 dark:border-zinc-700"}`}>
-          <input type="radio" name="sum" checked={elegido?.propiedad_id === s.propiedad_id} onChange={() => setElegido(s)} />
-          <span>
-            {s.direccion ?? `Propiedad ${s.propiedad_id}`}
-            <span className="block font-mono text-xs text-zinc-500">
-              {s.cups_luz.map((c) => `Luz ${c}`).join(" · ")}{s.cups_gas.length ? ` · Gas ${s.cups_gas.join(", ")}` : ""}
-            </span>
+      {lista.map((s) => (
+        <Opcion key={s.propiedad_id} elegida={elegido?.propiedad_id === s.propiedad_id} alElegir={() => setElegido(s)}>
+          {s.direccion ?? `Propiedad ${s.propiedad_id}`}
+          <span className="block font-mono text-xs text-zinc-500">
+            {s.cups_luz.map((c) => `Luz ${c}`).join(" · ")}{s.cups_gas.length ? ` · Gas ${s.cups_gas.join(", ")}` : ""}
           </span>
-        </label>
+        </Opcion>
       ))}
-      {elegido && <Fechas desde={desde} hasta={hasta} setDesde={setDesde} setHasta={setHasta} />}
-      {error && <Aviso tipo="error">{error}</Aviso>}
-      <div className="flex justify-end gap-2">
-        <button className="btn-secundario" onClick={cerrar}>Cancelar</button>
-        <button className="btn-primario" disabled={!elegido || ocupado} onClick={importar}>{ocupado ? "Descargando…" : "Importar"}</button>
-      </div>
+      {elegido && <Fechas {...imp} />}
+      {imp.error && <Aviso tipo="error">{imp.error}</Aviso>}
+      <Pie cerrar={cerrar} puede={!!elegido} ocupado={imp.ocupado} importar={() => imp.ejecutar(async () => {
+        hecho(await api.post<ResultadoImportacion>(`/domicilios/${domicilio.id}/consumo/octopus`, {
+          credenciales: cred, propiedad_id: elegido!.propiedad_id, desde: imp.desde, hasta: imp.hasta,
+        }));
+      })} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, type EstadoPvpc, type Vigencia } from "../api";
 import { Aviso, Cabecera, Campo, fecha, Modal, num, useDatos } from "../components/ui";
@@ -23,21 +23,17 @@ export default function Ajustes() {
       <Cabecera titulo="Ajustes" sub="Fuentes de datos, conexiones y parámetros regulados." />
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <TarjetaPvpc />
-        <div className="space-y-6">
-          <Conexion
-            ruta="/datadis"
-            titulo="Datadis"
-            campoUsuario="usuario"
-            etiquetaUsuario="Usuario (NIF/NIE)"
-            ayuda="Portal oficial de las distribuidoras. Regístrate gratis en datadis.es con tu DNI."
-          />
-          <Conexion
-            ruta="/octopus"
-            titulo="Octopus Energy"
-            campoUsuario="email"
-            etiquetaUsuario="Email del área de cliente"
-            ayuda="Los mismos datos con los que entras en la web o la app de Octopus."
-          />
+        <div className="tarjeta">
+          <h3 className="flex items-center gap-2 font-semibold"><ShieldCheck size={16} className="text-acento-600" /> Datadis y Octopus</h3>
+          <p className="mt-2 text-sm text-zinc-500">
+            CompElectrix <strong>no guarda tus contraseñas</strong>. Cuando importas consumos desde un domicilio te las pide en un
+            formulario normal de inicio de sesión, que tu gestor de contraseñas (1Password, Bitwarden, el del navegador…) puede
+            rellenar. Se usan solo para esa importación y se descartan.
+          </p>
+          <p className="mt-2 text-sm text-zinc-500">
+            Consejo: guarda en tu gestor una entrada para Datadis y otra para Octopus con la dirección de tu Raspberry, y llámalas
+            «CompElectrix · Datadis» y «CompElectrix · Octopus» para distinguirlas.
+          </p>
         </div>
       </div>
       <h2 className="mb-1 text-lg font-semibold">Impuestos y cargos regulados</h2>
@@ -194,53 +190,5 @@ function TarjetaPvpc() {
         <button className="btn-primario mb-5" onClick={lanzar} disabled={datos?.en_curso}>Actualizar ahora</button>
       </div>
     </div>
-  );
-}
-
-function Conexion({ ruta, titulo, campoUsuario, etiquetaUsuario, ayuda }: {
-  ruta: string; titulo: string; campoUsuario: "usuario" | "email"; etiquetaUsuario: string; ayuda: string;
-}) {
-  const { datos, recargar } = useDatos<Record<string, string | boolean | null>>(ruta);
-  const [usuario, setUsuario] = useState<string | null>(null);
-  const [clave, setClave] = useState("");
-  const [msg, setMsg] = useState<{ tipo: "ok" | "error"; t: string } | null>(null);
-  const valorUsuario = usuario ?? (datos?.[campoUsuario] as string | null) ?? "";
-
-  const guardar = async (e: FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.put(ruta, { [campoUsuario]: valorUsuario, clave: clave || null });
-      setClave("");
-      setMsg({ tipo: "ok", t: "Guardado. Pruébalo desde un domicilio con el botón de importar." });
-      recargar();
-    } catch (err) {
-      setMsg({ tipo: "error", t: (err as Error).message });
-    }
-  };
-  const olvidar = async () => {
-    if (!confirm(`¿Borrar los datos de acceso a ${titulo}?`)) return;
-    await api.del(ruta);
-    setUsuario(null);
-    setMsg(null);
-    recargar();
-  };
-
-  return (
-    <form className="tarjeta" onSubmit={guardar}>
-      <h3 className="flex items-center gap-2 font-semibold"><KeyRound size={16} className="text-acento-600" /> {titulo}</h3>
-      <p className="mt-1 text-sm text-zinc-500">{ayuda}</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <Campo etiqueta={etiquetaUsuario}><input className="entrada" required value={valorUsuario} onChange={(e) => setUsuario(e.target.value)} autoComplete="off" /></Campo>
-        <Campo etiqueta="Contraseña" ayuda={datos?.tiene_clave ? "Guardada. Déjala vacía para no cambiarla." : undefined}>
-          <input className="entrada" type="password" value={clave} onChange={(e) => setClave(e.target.value)} required={!datos?.tiene_clave} autoComplete="new-password" />
-        </Campo>
-      </div>
-      {msg && <div className="mt-3"><Aviso tipo={msg.tipo}>{msg.t}</Aviso></div>}
-      <div className="mt-4 flex items-center gap-2">
-        <button className="btn-primario">Guardar</button>
-        {datos?.tiene_clave && <button type="button" className="btn-peligro" onClick={olvidar}>Olvidar</button>}
-        <span className="ml-auto text-xs text-zinc-500">Se guarda solo en tu servidor.</span>
-      </div>
-    </form>
   );
 }

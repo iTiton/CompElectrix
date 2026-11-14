@@ -10,7 +10,7 @@ from pathlib import Path
 from sqlalchemy import event
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from .models import VigenciaRegulada
+from .models import Ajuste, VigenciaRegulada
 
 DATA_DIR = Path(os.environ.get("COMPELECTRIX_DATA", Path(__file__).resolve().parents[2] / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -54,6 +54,11 @@ def init_db() -> None:
         if not s.exec(select(VigenciaRegulada)).first():
             s.add_all(VigenciaRegulada.model_validate(v) for v in VIGENCIAS_INICIALES)
             s.commit()
+        # La versión 0.2.0 guardaba credenciales; ya no se guardan: se borran si quedan
+        for clave in ("datadis_usuario", "datadis_clave", "octopus_email", "octopus_clave"):
+            if a := s.get(Ajuste, clave):
+                s.delete(a)
+        s.commit()
 
 
 def get_session() -> Iterator[Session]:
