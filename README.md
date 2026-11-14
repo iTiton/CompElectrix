@@ -26,6 +26,7 @@ Aplicación de comparación de tarifas eléctricas para uso personal, pensada pa
 | 4 | Importar ofertas del comparador de la CNMC | Pendiente |
 | 5 | Informes guardados y exportación a PDF | Pendiente |
 | 6 | Guía de acceso por VPN (Tailscale) y copias de seguridad | Pendiente |
+| 7 | Suministros de gas: TUR, ofertas y comparativa | Pendiente |
 | — | Autoconsumo y excedentes | Más adelante |
 
 ## Instalación en una Raspberry Pi (o cualquier equipo con Docker)
