@@ -72,12 +72,26 @@ Solo se carga si la aplicación está vacía. Después puedes borrar los domicil
 cd CompElectrix
 git pull
 docker compose up -d --build
+docker image prune -f      # borra las versiones anteriores de la imagen (~240 MB cada una)
 ```
 
 ### Copia de seguridad
 
 Todos tus datos están en la carpeta `data/`. Para hacer una copia basta con copiar esa carpeta
 (mejor con la aplicación parada: `docker compose stop`, copiar y `docker compose start`).
+
+### Espacio en disco
+
+| Qué | Cuánto |
+|---|---|
+| Imagen de Docker | ~240 MB (una sola si borras las antiguas al actualizar) |
+| Un año de precios del PVPC | < 1 MB |
+| Un año de consumo horario de un domicilio | < 1 MB |
+| Facturas, tarifas y domicilios | unos KB |
+| Registros (logs) | como máximo 2 MB, rotan solos |
+
+En **Ajustes → Almacenamiento** ves cuánto ocupa la base de datos. El botón **Compactar** recupera el espacio
+de lo que hayas borrado.
 
 ### Consumo de recursos
 

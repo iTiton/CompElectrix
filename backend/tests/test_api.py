@@ -108,3 +108,11 @@ def test_prefijo_del_proxy():
     assert prefijo(req("/herramientas/compelectrix/")) == "/herramientas/compelectrix"
     assert prefijo(req('/x"><script>')) == ""
     assert prefijo(req("")) == ""
+
+
+def test_almacenamiento_y_compactar():
+    with TestClient(app) as c:
+        a = c.get("/api/almacenamiento").json()
+        assert a["bytes_total"] > 0 and "precios_horarios" in a["filas"]
+        r = c.post("/api/almacenamiento/compactar").json()
+        assert r["despues"] > 0

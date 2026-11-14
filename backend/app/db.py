@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlmodel import Session, SQLModel, create_engine, select
 
 from .models import Ajuste, VigenciaRegulada
@@ -48,9 +48,19 @@ VIGENCIAS_INICIALES = [
 ]
 
 
+INDICES_OBSOLETOS = (  # redundantes con las restricciones únicas (versión 0.2.0)
+    "ix_preciohorario_serie",
+    "ix_preciohorario_inicio_utc",
+    "ix_consumohorario_domicilio_id",
+    "ix_consumohorario_inicio_utc",
+)
+
+
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     with Session(engine) as s:
+        for i in INDICES_OBSOLETOS:
+            s.exec(text(f"DROP INDEX IF EXISTS {i}"))  # type: ignore[call-overload]
         if not s.exec(select(VigenciaRegulada)).first():
             s.add_all(VigenciaRegulada.model_validate(v) for v in VIGENCIAS_INICIALES)
             s.commit()
@@ -64,3 +74,16 @@ def init_db() -> None:
 def get_session() -> Iterator[Session]:
     with Session(engine) as s:
         yield s
+
+
+def ficheros_bd() -> list[Path]:
+    base = Path(engine.url.database or "")
+    return [p for p in (base, base.with_name(base.name + "-wal"), base.with_name(base.name + "-shm")) if p.exists()]
+
+
+def compactar() -> None:
+    """Reescribe la base de datos sin huecos y vacía el diario WAL."""
+    with engine.connect() as c:
+        c.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")
+        c.exec_driver_sql("VACUUM")
+        c.exec_driver_sql("PRAGMA wal_checkpoint(TRUNCATE)")

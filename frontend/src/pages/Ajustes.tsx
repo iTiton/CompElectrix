@@ -1,4 +1,4 @@
-import { Pencil, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { HardDrive, Pencil, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { api, type EstadoPvpc, type Vigencia } from "../api";
 import { Aviso, Cabecera, Campo, fecha, Modal, num, useDatos } from "../components/ui";
@@ -36,6 +36,7 @@ export default function Ajustes() {
           </p>
         </div>
       </div>
+      <div className="mb-6"><TarjetaAlmacenamiento /></div>
       <h2 className="mb-1 text-lg font-semibold">Impuestos y cargos regulados</h2>
       <p className="mb-4 text-sm text-zinc-500">Se aplican a todas las tarifas. Cambian por ley, así que se guardan con fechas de vigencia.</p>
       <div className="mb-4">
@@ -189,6 +190,64 @@ function TarjetaPvpc() {
         </Campo>
         <button className="btn-primario mb-5" onClick={lanzar} disabled={datos?.en_curso}>Actualizar ahora</button>
       </div>
+    </div>
+  );
+}
+
+
+interface Almacenamiento {
+  bytes_total: number;
+  bytes_libres: number;
+  filas: Record<string, number>;
+}
+
+const tam = (b: number) => (b < 1024 * 1024 ? `${num(b / 1024, 0)} KB` : `${num(b / 1024 / 1024, 1)} MB`);
+const NOMBRES: Record<string, string> = {
+  precios_horarios: "Precios horarios PVPC",
+  consumos_horarios: "Horas de consumo",
+  facturas: "Facturas",
+  tarifas: "Tarifas",
+  domicilios: "Domicilios",
+};
+
+function TarjetaAlmacenamiento() {
+  const { datos, recargar } = useDatos<Almacenamiento>("/almacenamiento");
+  const [msg, setMsg] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+  const compactar = async () => {
+    setOcupado(true);
+    try {
+      const r = await api.post<{ antes: number; despues: number }>("/almacenamiento/compactar", {});
+      setMsg(`Compactada: de ${tam(r.antes)} a ${tam(r.despues)}.`);
+      recargar();
+    } finally {
+      setOcupado(false);
+    }
+  };
+  if (!datos) return null;
+  return (
+    <div className="tarjeta">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 font-semibold"><HardDrive size={16} className="text-acento-600" /> Almacenamiento</h3>
+          <p className="mt-1 text-sm text-zinc-500">
+            Base de datos: <strong className="tabular-nums">{tam(datos.bytes_total)}</strong>. Cada año de precios o de consumo
+            horario de un domicilio ocupa menos de 1 MB.
+          </p>
+        </div>
+        <button className="btn-secundario" onClick={compactar} disabled={ocupado} title="Reescribe la base de datos para recuperar el espacio de lo borrado">
+          {ocupado ? "Compactando…" : `Compactar${datos.bytes_libres > 0 ? ` (recupera ${tam(datos.bytes_libres)})` : ""}`}
+        </button>
+      </div>
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-5">
+        {Object.entries(datos.filas).map(([k, v]) => (
+          <div key={k}>
+            <dt className="text-xs text-zinc-500">{NOMBRES[k] ?? k}</dt>
+            <dd className="tabular-nums">{num(v)}</dd>
+          </div>
+        ))}
+      </dl>
+      {msg && <div className="mt-3"><Aviso tipo="ok">{msg}</Aviso></div>}
     </div>
   );
 }

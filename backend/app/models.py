@@ -105,16 +105,18 @@ class PrecioHorario(SQLModel, table=True):
 
     __table_args__ = (UniqueConstraint("serie", "inicio_utc"),)
     id: int | None = Field(default=None, primary_key=True)
-    serie: str = Field(default="pvpc", index=True)
-    inicio_utc: datetime = Field(index=True)
+    # Sin índices sueltos: la restricción única (serie, inicio_utc) ya sirve de índice
+    serie: str = Field(default="pvpc")
+    inicio_utc: datetime
     precio_eur_kwh: float
 
 
 class ConsumoHorario(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("domicilio_id", "inicio_utc"),)
     id: int | None = Field(default=None, primary_key=True)
-    domicilio_id: int = Field(foreign_key="domicilio.id", index=True)
-    inicio_utc: datetime = Field(index=True)
+    # La restricción única (domicilio_id, inicio_utc) ya sirve de índice
+    domicilio_id: int = Field(foreign_key="domicilio.id")
+    inicio_utc: datetime
     kwh: float = Field(ge=0)
     real: bool = True  # False si la distribuidora lo marca como estimado
     origen: str = "csv"

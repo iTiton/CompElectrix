@@ -7,10 +7,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, SecretStr, model_validator
+from sqlalchemy import text
 from sqlmodel import Session, SQLModel, delete, func, select
 
 from . import pvpc, servicios
-from .db import get_session
+from .db import compactar, ficheros_bd, get_session
 from .fuentes.datadis import ClienteDatadis, ErrorDatadis
 from .fuentes.octopus import ClienteOctopus, ErrorOctopus
 from .importadores.consumo import a_horas_utc, importar_csv
@@ -394,3 +395,39 @@ def importar_octopus(id_: int, p: PeticionOctopus, s: SessionDep):
     if not horas:
         raise HTTPException(404, "Octopus no ha devuelto consumos para ese periodo.")
     return {"horas": servicios.guardar_consumo(s, id_, horas, "octopus"), "avisos": []}
+
+
+# ============================================================== Almacenamiento
+@router.get("/almacenamiento")
+def almacenamiento(s: SessionDep):
+    def contar(modelo) -> int:
+        return s.exec(select(func.count()).select_from(modelo)).one()
+
+    ficheros = ficheros_bd()
+    return {
+        "bytes_total": sum(p.stat().st_size for p in ficheros),
+        "bytes_libres": _bytes_libres(s),
+        "filas": {
+            "precios_horarios": contar(PrecioHorario),
+            "consumos_horarios": contar(ConsumoHorario),
+            "facturas": contar(Factura),
+            "tarifas": contar(Tarifa),
+            "domicilios": contar(Domicilio),
+        },
+    }
+
+
+def _bytes_libres(s: Session) -> int:
+    """Espacio dentro del fichero que se recuperaría compactando."""
+    libres = s.exec(text("PRAGMA freelist_count")).one()[0]  # type: ignore[call-overload]
+    tam = s.exec(text("PRAGMA page_size")).one()[0]  # type: ignore[call-overload]
+    return libres * tam
+
+
+@router.post("/almacenamiento/compactar")
+def compactar_bd(s: SessionDep):
+    antes = sum(p.stat().st_size for p in ficheros_bd())
+    s.close()
+    compactar()
+    despues = sum(p.stat().st_size for p in ficheros_bd())
+    return {"antes": antes, "despues": despues}
