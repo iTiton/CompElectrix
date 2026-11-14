@@ -1,6 +1,6 @@
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { KeyRound, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
-import { api, type Vigencia } from "../api";
+import { api, type EstadoPvpc, type Vigencia } from "../api";
 import { Aviso, Cabecera, Campo, fecha, Modal, num, useDatos } from "../components/ui";
 
 export default function Ajustes() {
@@ -20,7 +20,28 @@ export default function Ajustes() {
 
   return (
     <>
-      <Cabecera titulo="Ajustes" sub="Parámetros regulados que se aplican a todas las tarifas. Cambian por ley, así que se guardan con fechas de vigencia." />
+      <Cabecera titulo="Ajustes" sub="Fuentes de datos, conexiones y parámetros regulados." />
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <TarjetaPvpc />
+        <div className="space-y-6">
+          <Conexion
+            ruta="/datadis"
+            titulo="Datadis"
+            campoUsuario="usuario"
+            etiquetaUsuario="Usuario (NIF/NIE)"
+            ayuda="Portal oficial de las distribuidoras. Regístrate gratis en datadis.es con tu DNI."
+          />
+          <Conexion
+            ruta="/octopus"
+            titulo="Octopus Energy"
+            campoUsuario="email"
+            etiquetaUsuario="Email del área de cliente"
+            ayuda="Los mismos datos con los que entras en la web o la app de Octopus."
+          />
+        </div>
+      </div>
+      <h2 className="mb-1 text-lg font-semibold">Impuestos y cargos regulados</h2>
+      <p className="mb-4 text-sm text-zinc-500">Se aplican a todas las tarifas. Cambian por ley, así que se guardan con fechas de vigencia.</p>
       <div className="mb-4">
         <Aviso>
           Comprueba estos valores con tus facturas. Si una factura cruza dos periodos, se prorratea por días.
@@ -30,7 +51,7 @@ export default function Ajustes() {
       {error && <div className="mb-4"><Aviso tipo="error">{error}</Aviso></div>}
       <div className="tarjeta overflow-x-auto p-0">
         <div className="flex items-center justify-between px-5 pt-5">
-          <h3 className="font-semibold">Impuestos y cargos regulados</h3>
+          <h3 className="font-semibold">Periodos de vigencia</h3>
           <button className="btn-primario" onClick={() => setEditar("nueva")}><Plus size={16} /> Nuevo periodo</button>
         </div>
         <table className="tabla mt-3">
@@ -122,6 +143,102 @@ function FormVigencia({ inicial, cerrar, hecho }: { inicial?: Vigencia; cerrar: 
           <button type="button" className="btn-secundario" onClick={cerrar}>Cancelar</button>
           <button className="btn-primario">Guardar</button>
         </div>
+      </div>
+    </form>
+  );
+}
+
+function TarjetaPvpc() {
+  const { datos, recargar } = useDatos<EstadoPvpc>("/pvpc/estado");
+  const [desde, setDesde] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const lanzar = async () => {
+    setError(null);
+    try {
+      await api.post("/pvpc/sincronizar", desde ? { desde } : {});
+      const vigilar = setInterval(async () => {
+        const e = await api.get<EstadoPvpc>("/pvpc/estado");
+        recargar();
+        if (!e.en_curso) clearInterval(vigilar);
+      }, 3000);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
+  return (
+    <div className="tarjeta">
+      <h3 className="flex items-center gap-2 font-semibold"><RefreshCw size={16} className="text-acento-600" /> Precios del PVPC</h3>
+      <p className="mt-1 text-sm text-zinc-500">
+        Se descargan solos de Red Eléctrica al arrancar y cada 6 horas. No necesitan clave.
+      </p>
+      {datos && (
+        <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">
+          <dt className="text-zinc-500">Histórico</dt>
+          <dd>{datos.horas ? `${fecha(datos.desde)} – ${fecha(datos.hasta)}` : "vacío"}</dd>
+          <dt className="text-zinc-500">Horas guardadas</dt>
+          <dd className="tabular-nums">{num(datos.horas)}</dd>
+          <dt className="text-zinc-500">Última actualización</dt>
+          <dd>{datos.ultima_sync ? new Date(datos.ultima_sync).toLocaleString("es-ES") : "—"}</dd>
+        </dl>
+      )}
+      {datos?.en_curso && <div className="mt-3"><Aviso tipo="ok">Actualizando… {datos.progreso}</Aviso></div>}
+      {datos?.ultimo_error && !datos.en_curso && <div className="mt-3"><Aviso>{datos.ultimo_error}</Aviso></div>}
+      {error && <div className="mt-3"><Aviso tipo="error">{error}</Aviso></div>}
+      <div className="mt-4 flex flex-wrap items-end gap-2">
+        <Campo etiqueta="Descargar desde (opcional)" ayuda="Para comparar facturas antiguas. Desde junio de 2021.">
+          <input className="entrada" type="date" min="2021-06-01" value={desde} onChange={(e) => setDesde(e.target.value)} />
+        </Campo>
+        <button className="btn-primario mb-5" onClick={lanzar} disabled={datos?.en_curso}>Actualizar ahora</button>
+      </div>
+    </div>
+  );
+}
+
+function Conexion({ ruta, titulo, campoUsuario, etiquetaUsuario, ayuda }: {
+  ruta: string; titulo: string; campoUsuario: "usuario" | "email"; etiquetaUsuario: string; ayuda: string;
+}) {
+  const { datos, recargar } = useDatos<Record<string, string | boolean | null>>(ruta);
+  const [usuario, setUsuario] = useState<string | null>(null);
+  const [clave, setClave] = useState("");
+  const [msg, setMsg] = useState<{ tipo: "ok" | "error"; t: string } | null>(null);
+  const valorUsuario = usuario ?? (datos?.[campoUsuario] as string | null) ?? "";
+
+  const guardar = async (e: FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.put(ruta, { [campoUsuario]: valorUsuario, clave: clave || null });
+      setClave("");
+      setMsg({ tipo: "ok", t: "Guardado. Pruébalo desde un domicilio con el botón de importar." });
+      recargar();
+    } catch (err) {
+      setMsg({ tipo: "error", t: (err as Error).message });
+    }
+  };
+  const olvidar = async () => {
+    if (!confirm(`¿Borrar los datos de acceso a ${titulo}?`)) return;
+    await api.del(ruta);
+    setUsuario(null);
+    setMsg(null);
+    recargar();
+  };
+
+  return (
+    <form className="tarjeta" onSubmit={guardar}>
+      <h3 className="flex items-center gap-2 font-semibold"><KeyRound size={16} className="text-acento-600" /> {titulo}</h3>
+      <p className="mt-1 text-sm text-zinc-500">{ayuda}</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Campo etiqueta={etiquetaUsuario}><input className="entrada" required value={valorUsuario} onChange={(e) => setUsuario(e.target.value)} autoComplete="off" /></Campo>
+        <Campo etiqueta="Contraseña" ayuda={datos?.tiene_clave ? "Guardada. Déjala vacía para no cambiarla." : undefined}>
+          <input className="entrada" type="password" value={clave} onChange={(e) => setClave(e.target.value)} required={!datos?.tiene_clave} autoComplete="new-password" />
+        </Campo>
+      </div>
+      {msg && <div className="mt-3"><Aviso tipo={msg.tipo}>{msg.t}</Aviso></div>}
+      <div className="mt-4 flex items-center gap-2">
+        <button className="btn-primario">Guardar</button>
+        {datos?.tiene_clave && <button type="button" className="btn-peligro" onClick={olvidar}>Olvidar</button>}
+        <span className="ml-auto text-xs text-zinc-500">Se guarda solo en tu servidor.</span>
       </div>
     </form>
   );

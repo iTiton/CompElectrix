@@ -2,20 +2,26 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, model_validator
-from sqlmodel import Session, SQLModel, func, select
+from sqlmodel import Session, SQLModel, delete, func, select
 
-from . import servicios
+from . import pvpc, servicios
 from .db import get_session
+from .fuentes.datadis import ClienteDatadis, ErrorDatadis
+from .fuentes.octopus import ClienteOctopus, ErrorOctopus
+from .importadores.consumo import a_horas_utc, importar_csv
+from .motor.periodos import a_local, limites_utc, periodo_local
 from .models import (
+    ConsumoHorario,
     Domicilio,
     DomicilioBase,
     Factura,
     FacturaBase,
+    PrecioHorario,
     Tarifa,
     TarifaBase,
     VigenciaBase,
@@ -92,6 +98,7 @@ def editar_domicilio(id_: int, datos: DomicilioBase, s: SessionDep):
 @router.delete("/domicilios/{id_}", status_code=204)
 def borrar_domicilio(id_: int, s: SessionDep):
     d = _obtener(s, Domicilio, id_)
+    s.exec(delete(ConsumoHorario).where(ConsumoHorario.domicilio_id == id_))  # type: ignore[call-overload]
     for f in s.exec(select(Factura).where(Factura.domicilio_id == id_)):
         s.delete(f)
     s.flush()  # las facturas primero: no hay relación ORM que fije el orden
@@ -213,3 +220,228 @@ def borrar_vigencia(id_: int, s: SessionDep):
 @router.get("/salud")
 def salud():
     return {"estado": "ok"}
+
+
+# ======================================================================= PVPC
+@router.get("/pvpc/estado")
+def estado_pvpc(s: SessionDep):
+    mn, mx, n = pvpc.rango_precios(s)
+    return {
+        "horas": n,
+        "desde": a_local(mn).date().isoformat() if mn else None,
+        "hasta": a_local(mx).date().isoformat() if mx else None,
+        "ultima_sync": pvpc.obtener_ajuste(s, "pvpc_ultima_sync"),
+        "ultimo_error": pvpc.obtener_ajuste(s, "pvpc_ultimo_error"),
+        **pvpc.estado,
+    }
+
+
+class PeticionSync(BaseModel):
+    desde: date | None = None
+    hasta: date | None = None
+
+
+@router.post("/pvpc/sincronizar", status_code=202)
+def sincronizar_pvpc(p: PeticionSync):
+    try:
+        pvpc.sincronizar_en_segundo_plano(p.desde, p.hasta)
+    except RuntimeError as e:
+        raise HTTPException(409, str(e)) from e
+    return {"mensaje": "Actualización iniciada"}
+
+
+@router.get("/pvpc/dia")
+def precios_dia(s: SessionDep, dia: date):
+    ini, fin = limites_utc(dia, dia)
+    filas = s.exec(
+        select(PrecioHorario)
+        .where(PrecioHorario.serie == "pvpc", PrecioHorario.inicio_utc >= ini, PrecioHorario.inicio_utc < fin)
+        .order_by(PrecioHorario.inicio_utc)  # type: ignore[arg-type]
+    ).all()
+    horas = []
+    for p in filas:
+        local = a_local(p.inicio_utc)
+        horas.append(
+            {"hora": local.strftime("%H:%M"), "precio": round(p.precio_eur_kwh, 5), "periodo": periodo_local(local)}
+        )
+    precios = [h["precio"] for h in horas]
+    return {
+        "dia": dia.isoformat(),
+        "horas": horas,
+        "media": round(sum(precios) / len(precios), 5) if precios else None,
+        "minimo": min(horas, key=lambda h: h["precio"]) if horas else None,
+        "maximo": max(horas, key=lambda h: h["precio"]) if horas else None,
+    }
+
+
+# ============================================================ Consumo horario
+class SubidaCsv(BaseModel):
+    contenido: str
+    nombre: str | None = None
+
+
+@router.post("/domicilios/{id_}/consumo/csv")
+def importar_consumo_csv(id_: int, p: SubidaCsv, s: SessionDep):
+    d = _obtener(s, Domicilio, id_)
+    try:
+        res = importar_csv(p.contenido)
+    except ValueError as e:
+        raise HTTPException(422, str(e)) from e
+    avisos = list(res.avisos)
+    if d.cups and res.cups and d.cups.upper() not in res.cups:
+        avisos.append(f"El CUPS del fichero ({', '.join(sorted(res.cups))}) no coincide con el del domicilio.")
+    if len(res.cups) > 1:
+        avisos.append("El fichero contiene varios CUPS; se han sumado todos en este domicilio.")
+    n = servicios.guardar_consumo(s, id_, res.horas, "csv")
+    return {"horas": n, "avisos": avisos, "desde": _dia_local(res.horas[0][0]), "hasta": _dia_local(res.horas[-1][0])}
+
+
+def _dia_local(utc: datetime) -> str:
+    return a_local(utc).date().isoformat()
+
+
+@router.get("/domicilios/{id_}/consumo")
+def resumen_consumo(id_: int, s: SessionDep):
+    _obtener(s, Domicilio, id_)
+    return servicios.resumen_consumo(s, id_)
+
+
+@router.delete("/domicilios/{id_}/consumo", status_code=204)
+def borrar_consumo(id_: int, s: SessionDep):
+    _obtener(s, Domicilio, id_)
+    s.exec(delete(ConsumoHorario).where(ConsumoHorario.domicilio_id == id_))  # type: ignore[call-overload]
+    s.commit()
+
+
+@router.post("/domicilios/{id_}/consumo/generar-facturas")
+def generar_facturas(id_: int, s: SessionDep):
+    return servicios.generar_facturas_desde_consumo(s, _obtener(s, Domicilio, id_))
+
+
+# ==================================================================== Datadis
+class CredencialesDatadis(BaseModel):
+    usuario: str
+    clave: str | None = None  # vacía = conservar la guardada
+
+
+def _cliente_datadis(s: Session) -> ClienteDatadis:
+    u = pvpc.obtener_ajuste(s, "datadis_usuario")
+    c = pvpc.obtener_ajuste(s, "datadis_clave")
+    if not u or not c:
+        raise HTTPException(400, "Configura primero tu usuario y contraseña de Datadis en Ajustes.")
+    return ClienteDatadis(u, c)
+
+
+@router.get("/datadis")
+def ver_datadis(s: SessionDep):
+    return {
+        "usuario": pvpc.obtener_ajuste(s, "datadis_usuario"),
+        "tiene_clave": bool(pvpc.obtener_ajuste(s, "datadis_clave")),
+    }
+
+
+@router.put("/datadis")
+def guardar_datadis(p: CredencialesDatadis, s: SessionDep):
+    pvpc.guardar_ajuste(s, "datadis_usuario", p.usuario.strip().upper())
+    if p.clave:
+        pvpc.guardar_ajuste(s, "datadis_clave", p.clave)
+    return ver_datadis(s)
+
+
+@router.delete("/datadis", status_code=204)
+def borrar_datadis(s: SessionDep):
+    pvpc.guardar_ajuste(s, "datadis_usuario", None)
+    pvpc.guardar_ajuste(s, "datadis_clave", None)
+
+
+@router.get("/datadis/suministros")
+def suministros_datadis(s: SessionDep):
+    try:
+        return _cliente_datadis(s).suministros()
+    except ErrorDatadis as e:
+        raise HTTPException(502, str(e)) from e
+
+
+class PeticionDatadis(BaseModel):
+    cups: str
+    codigo_distribuidora: str
+    tipo_punto: int | str = 5
+    desde: date
+    hasta: date
+
+
+@router.post("/domicilios/{id_}/consumo/datadis")
+def importar_datadis(id_: int, p: PeticionDatadis, s: SessionDep):
+    _obtener(s, Domicilio, id_)
+    try:
+        registros = _cliente_datadis(s).consumos(p.cups, p.codigo_distribuidora, p.tipo_punto, p.desde, p.hasta)
+    except ErrorDatadis as e:
+        raise HTTPException(502, str(e)) from e
+    registros = [r for r in registros if p.desde <= r.fecha <= p.hasta]
+    if not registros:
+        raise HTTPException(404, "Datadis no ha devuelto consumos para ese periodo.")
+    res = a_horas_utc(registros)
+    n = servicios.guardar_consumo(s, id_, res.horas, "datadis")
+    return {"horas": n, "avisos": res.avisos}
+
+
+# ==================================================================== Octopus
+class CredencialesOctopus(BaseModel):
+    email: str
+    clave: str | None = None
+
+
+def _cliente_octopus(s: Session) -> ClienteOctopus:
+    e = pvpc.obtener_ajuste(s, "octopus_email")
+    c = pvpc.obtener_ajuste(s, "octopus_clave")
+    if not e or not c:
+        raise HTTPException(400, "Configura primero tu email y contraseña de Octopus en Ajustes.")
+    return ClienteOctopus(e, c)
+
+
+@router.get("/octopus")
+def ver_octopus(s: SessionDep):
+    return {
+        "email": pvpc.obtener_ajuste(s, "octopus_email"),
+        "tiene_clave": bool(pvpc.obtener_ajuste(s, "octopus_clave")),
+    }
+
+
+@router.put("/octopus")
+def guardar_octopus(p: CredencialesOctopus, s: SessionDep):
+    pvpc.guardar_ajuste(s, "octopus_email", p.email.strip())
+    if p.clave:
+        pvpc.guardar_ajuste(s, "octopus_clave", p.clave)
+    return ver_octopus(s)
+
+
+@router.delete("/octopus", status_code=204)
+def borrar_octopus(s: SessionDep):
+    pvpc.guardar_ajuste(s, "octopus_email", None)
+    pvpc.guardar_ajuste(s, "octopus_clave", None)
+
+
+@router.get("/octopus/suministros")
+def suministros_octopus(s: SessionDep):
+    try:
+        return _cliente_octopus(s).suministros()
+    except ErrorOctopus as e:
+        raise HTTPException(502, str(e)) from e
+
+
+class PeticionOctopus(BaseModel):
+    propiedad_id: str
+    desde: date
+    hasta: date
+
+
+@router.post("/domicilios/{id_}/consumo/octopus")
+def importar_octopus(id_: int, p: PeticionOctopus, s: SessionDep):
+    _obtener(s, Domicilio, id_)
+    try:
+        horas = _cliente_octopus(s).consumos(p.propiedad_id, p.desde, p.hasta)
+    except ErrorOctopus as e:
+        raise HTTPException(502, str(e)) from e
+    if not horas:
+        raise HTTPException(404, "Octopus no ha devuelto consumos para ese periodo.")
+    return {"horas": servicios.guardar_consumo(s, id_, horas, "octopus"), "avisos": []}

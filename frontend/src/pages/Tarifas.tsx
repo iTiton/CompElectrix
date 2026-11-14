@@ -35,7 +35,7 @@ export default function Tarifas() {
       {error && <div className="mb-4"><Aviso tipo="error">{error}</Aviso></div>}
       {datos?.length === 0 ? (
         <Vacio icono={<Tags />} titulo="Catálogo vacío">
-          Añade tu tarifa actual y las ofertas que quieras comparar. En próximas versiones se podrán importar del comparador de la CNMC y del PVPC automáticamente.
+          Añade tu tarifa actual y las ofertas que quieras comparar. El PVPC aparece solo en cuanto se descargan sus precios. En una próxima versión se podrán importar las ofertas del comparador de la CNMC.
         </Vacio>
       ) : (
         <div className="tarjeta overflow-x-auto p-0">
@@ -61,9 +61,15 @@ export default function Tarifas() {
                   </td>
                   <td className="num">{p(t.potencia_p1)}</td>
                   <td className="num">{p(t.potencia_p2)}</td>
-                  <td className="num">{p(t.energia_p1)}</td>
-                  <td className="num">{p(t.energia_p2)}</td>
-                  <td className="num">{p(t.energia_p3)}</td>
+                  {t.tipo === "pvpc" ? (
+                    <td className="text-center text-xs text-zinc-500" colSpan={3}>Precio horario oficial (REE)</td>
+                  ) : (
+                    <>
+                      <td className="num">{p(t.energia_p1)}</td>
+                      <td className="num">{p(t.energia_p2)}</td>
+                      <td className="num">{p(t.energia_p3)}</td>
+                    </>
+                  )}
                   <td className="num">{num(t.cuota_fija_mes, 2)}</td>
                   <td className="whitespace-nowrap text-right">
                     {t.url && <a className="btn p-1.5" href={t.url} target="_blank" rel="noreferrer" aria-label="Ver oferta"><ExternalLink size={15} /></a>}

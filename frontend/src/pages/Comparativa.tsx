@@ -208,6 +208,8 @@ function Ranking({ tarifas, conAhorro, seleccion, elegir }: { tarifas: Resultado
               <td>
                 <span className="font-medium">{t.nombre}</span>
                 {t.es_actual && <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">actual</span>}
+                {t.precision === "horario" && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="Calculado hora a hora con tu consumo real">hora a hora</span>}
+                {t.precision === "estimado" && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300" title="Sin consumo horario: se usa el precio medio de cada periodo">estimado</span>}
                 <span className="block text-xs text-zinc-500">{t.comercializadora}</span>
               </td>
               <td className="num">{eur(t.total_periodo)}</td>

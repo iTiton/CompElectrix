@@ -1,9 +1,11 @@
 import { ArrowLeft, BarChart3, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type Domicilio, type Factura, type Tarifa } from "../api";
 import { FormDomicilio, FormFactura } from "../components/formularios";
 import { Aviso, Cabecera, eur, fecha, Modal, num, useDatos, Vacio } from "../components/ui";
+
+const ConsumoHorario = lazy(() => import("../components/ConsumoHorario"));
 
 export default function DomicilioPage() {
   const { id } = useParams();
@@ -67,7 +69,7 @@ export default function DomicilioPage() {
                 const dias = Math.round((+new Date(f.fecha_fin) - +new Date(f.fecha_inicio)) / 864e5) + 1;
                 return (
                   <tr key={f.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                    <td>{fecha(f.fecha_inicio)} – {fecha(f.fecha_fin)}<span className="block text-xs text-zinc-500">{f.comercializadora}</span></td>
+                    <td>{fecha(f.fecha_inicio)} – {fecha(f.fecha_fin)}<span className="block text-xs text-zinc-500">{f.origen === "horario" ? "Desde consumo horario" : f.comercializadora}</span></td>
                     <td className="num">{dias}</td>
                     <td className="num">{num(f.kwh_p1)}</td>
                     <td className="num">{num(f.kwh_p2)}</td>
@@ -85,6 +87,10 @@ export default function DomicilioPage() {
           </table>
         </div>
       )}
+
+      <Suspense fallback={null}>
+        <ConsumoHorario domicilio={d} alCambiar={facs.recargar} />
+      </Suspense>
 
       <div className="mt-8 text-right">
         <button className="btn-peligro" onClick={borrarDomicilio}><Trash2 size={16} /> Borrar domicilio</button>

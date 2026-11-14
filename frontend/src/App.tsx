@@ -1,4 +1,4 @@
-import { BarChart3, Home, Laptop, Menu, Moon, Settings, Sun, Tags, Zap } from "lucide-react";
+import { BarChart3, Clock, Home, Laptop, Menu, Moon, Settings, Sun, Tags, Zap } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import Ajustes from "./pages/Ajustes";
@@ -8,6 +8,7 @@ import Tarifas from "./pages/Tarifas";
 
 // La comparativa lleva las gráficas (la parte más pesada): se carga solo al abrirla
 const ComparativaPage = lazy(() => import("./pages/Comparativa"));
+const Precios = lazy(() => import("./pages/Precios"));
 
 type Tema = "claro" | "oscuro" | "sistema";
 
@@ -38,6 +39,7 @@ function useTema() {
 const NAV = [
   { a: "/", icono: Home, texto: "Domicilios" },
   { a: "/comparativa", icono: BarChart3, texto: "Comparativa" },
+  { a: "/precios", icono: Clock, texto: "Precio PVPC" },
   { a: "/tarifas", icono: Tags, texto: "Tarifas" },
   { a: "/ajustes", icono: Settings, texto: "Ajustes" },
 ];
@@ -106,6 +108,7 @@ export default function App() {
           <Route path="/" element={<Inicio />} />
           <Route path="/domicilios/:id" element={<DomicilioPage />} />
           <Route path="/comparativa" element={<ComparativaPage />} />
+          <Route path="/precios" element={<Precios />} />
           <Route path="/tarifas" element={<Tarifas />} />
           <Route path="/ajustes" element={<Ajustes />} />
         </Routes>

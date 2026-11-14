@@ -90,6 +90,7 @@ export interface ResultadoTarifa {
   nombre: string;
   tipo: string;
   es_actual: boolean;
+  precision: "horario" | "estimado" | null;
   posicion: number;
   total_periodo: number;
   anual_estimado: number;
@@ -163,3 +164,70 @@ export const api = {
   put: <T>(ruta: string, cuerpo: unknown) => peticion<T>("PUT", ruta, cuerpo),
   del: (ruta: string) => peticion<void>("DELETE", ruta),
 };
+
+export interface EstadoPvpc {
+  horas: number;
+  desde: string | null;
+  hasta: string | null;
+  ultima_sync: string | null;
+  ultimo_error: string | null;
+  en_curso: boolean;
+  progreso: string | null;
+  mensaje: string | null;
+}
+
+export interface HoraPvpc {
+  hora: string;
+  precio: number;
+  periodo: "p1" | "p2" | "p3";
+}
+
+export interface DiaPvpc {
+  dia: string;
+  horas: HoraPvpc[];
+  media: number | null;
+  minimo: HoraPvpc | null;
+  maximo: HoraPvpc | null;
+}
+
+export interface ResumenConsumo {
+  horas: number;
+  desde: string | null;
+  hasta: string | null;
+  meses: {
+    mes: string;
+    kwh_p1: number;
+    kwh_p2: number;
+    kwh_p3: number;
+    kwh_total: number;
+    horas: number;
+    horas_esperadas: number;
+    completo: boolean;
+    estimadas: number;
+  }[];
+}
+
+export interface SuministroDatadis {
+  cups: string;
+  direccion: string;
+  distribuidora: string;
+  codigo_distribuidora: string;
+  tipo_punto: number | string;
+  desde: string | null;
+  hasta: string | null;
+}
+
+export interface SuministroOctopus {
+  cuenta: string;
+  propiedad_id: string;
+  direccion: string | null;
+  cups_luz: string[];
+  cups_gas: string[];
+}
+
+export interface ResultadoImportacion {
+  horas: number;
+  avisos: string[];
+  desde?: string;
+  hasta?: string;
+}

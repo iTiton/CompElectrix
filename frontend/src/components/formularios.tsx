@@ -276,6 +276,11 @@ export function FormTarifa({ inicial, hecho, cancelar }: { inicial?: Tarifa; hec
           <Campo etiqueta="P2 valle">{n("potencia_p2")}</Campo>
         </Rejilla>
       </Seccion>
+      {v.tipo === "pvpc" ? (
+        <Seccion titulo="Término de energía">
+          <Aviso>La energía del PVPC se calcula con el precio oficial de cada hora que publica Red Eléctrica. No hace falta introducirlo.</Aviso>
+        </Seccion>
+      ) : (
       <Seccion titulo="Término de energía (€/kWh)">
         <label className="mb-3 flex items-center gap-2 text-sm">
           <input type="checkbox" {...marca("precio_unico")} onChange={(e) => setV((x) => ({ ...x, precio_unico: e.target.checked }))} />
@@ -287,6 +292,7 @@ export function FormTarifa({ inicial, hecho, cancelar }: { inicial?: Tarifa; hec
           {!v.precio_unico && <Campo etiqueta="P3 valle">{n("energia_p3")}</Campo>}
         </Rejilla>
       </Seccion>
+      )}
       <Seccion titulo="Condiciones">
         <Rejilla cols={3}>
           <Campo etiqueta="Cuota fija (€/mes)" ayuda="Servicios o cuota de gestión">{n("cuota_fija_mes", "0.01")}</Campo>

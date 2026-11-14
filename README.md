@@ -10,6 +10,9 @@ Aplicación de comparación de tarifas eléctricas para uso personal, pensada pa
   descuentos, cuotas, financiación del bono social, impuesto eléctrico, alquiler del contador e IVA.
   Muestra el ahorro mensual y anual, un ranking, gráficas y el desglose concepto a concepto.
 - **Fiabilidad**: compara lo que calcula la aplicación con lo que pagaste de verdad.
+- **PVPC automático**: descarga sola el precio horario oficial de Red Eléctrica y lo muestra día a día.
+- **Consumo hora a hora** desde un CSV (Datadis, distribuidora, comercializadora), desde Datadis o desde Octopus.
+  Con él, el PVPC se calcula exacto y se pueden crear las facturas de los meses que falten.
 - **Parámetros regulados con fechas** (IVA, impuesto eléctrico, bono social…): si cambian a mitad de una
   factura, se prorratea por días.
 - Tema **claro, oscuro o automático**, y adaptada al móvil.
@@ -21,7 +24,7 @@ Aplicación de comparación de tarifas eléctricas para uso personal, pensada pa
 | Fase | Contenido | Estado |
 |---|---|---|
 | 1 | Domicilios, facturas y tarifas a mano, motor de cálculo 2.0TD, comparativa, temas | ✅ |
-| 2 | PVPC automático (REE), importar consumos de Datadis y de la comercializadora | Pendiente |
+| 2 | PVPC automático (REE), consumo horario desde CSV, Datadis y Octopus | ✅ |
 | 3 | Leer facturas desde PDF, foto o texto (con IA opcional) | Pendiente |
 | 4 | Importar ofertas del comparador de la CNMC | Pendiente |
 | 5 | Informes guardados y exportación a PDF | Pendiente |
@@ -104,6 +107,37 @@ también irán ahí. **El archivo `.env` y la carpeta `data/` nunca se suben al 
 5. **Ajustes**: revisa los impuestos y cargos. En 2026 hubo cambios temporales (rebaja de IVA e impuesto eléctrico
    entre marzo y mayo). Si tus facturas de esas fechas no cuadran, añade ese periodo con las fechas exactas.
 
+## Datos automáticos
+
+### Precio del PVPC
+
+No hay que hacer nada: la aplicación descarga los precios de Red Eléctrica al arrancar y cada 6 horas.
+La primera vez baja algo más de un año, en un par de minutos. Para comparar facturas más antiguas,
+ve a **Ajustes → Precios del PVPC** y elige una fecha de inicio (como muy pronto, junio de 2021).
+
+En **Precio PVPC** ves el precio de cada hora de hoy y de mañana (se publica sobre las 20:30), con su periodo.
+
+### Consumo horario
+
+En cada domicilio, la sección **Consumo horario** tiene tres formas de traer los datos:
+
+1. **Importar CSV**: el fichero que descargas de Datadis, de tu distribuidora (i-DE, e-distribución, UFD…)
+   o de tu comercializadora. Se reconocen automáticamente los formatos habituales.
+2. **Datadis**: el portal oficial y gratuito de las distribuidoras.
+   - Regístrate en [datadis.es](https://datadis.es) con tu DNI.
+   - Pon tu usuario y tu contraseña en **Ajustes**.
+   - Elige el suministro y las fechas.
+3. **Octopus Energy**: con el email y la contraseña de tu área de cliente, que se guardan en **Ajustes**.
+
+Después pulsa **Crear facturas de los meses sin factura** para completar los huecos. Esas facturas no tienen
+importe real, pero sirven para la comparativa.
+
+> Las conexiones con Datadis y Octopus siguen su documentación y el esquema público de cada API, pero aún
+> no se han probado con una cuenta real. Si algo falla, el mensaje de error dirá qué ha pasado.
+
+Los usuarios y contraseñas se guardan **solo en tu servidor**, dentro de `data/`, sin cifrar. Protege esa carpeta
+y no la compartas.
+
 ## Desarrollo
 
 ```bash
@@ -122,7 +156,10 @@ npm run dev        # http://localhost:5173, redirige /api al servidor
 Estructura:
 
 - `backend/app/motor/calculo.py`: motor de cálculo. Son funciones puras, con pruebas en `backend/tests/`.
-- `backend/app/servicios.py`: lógica de la comparativa.
+- `backend/app/motor/periodos.py`: periodos P1/P2/P3, festivos y cambios de hora.
+- `backend/app/servicios.py`: lógica de la comparativa, del consumo horario y del PVPC.
+- `backend/app/fuentes/`: clientes de REE, Datadis y Octopus.
+- `backend/app/importadores/consumo.py`: lector de CSV de consumo.
 - `backend/app/api.py`: API REST bajo `/api` (documentación interactiva en `/docs`).
 - `frontend/src/`: interfaz en React, Tailwind y Recharts.
 
