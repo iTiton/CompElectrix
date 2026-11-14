@@ -250,6 +250,12 @@ def sincronizar_pvpc(p: PeticionSync):
     return {"mensaje": "Actualización iniciada"}
 
 
+@router.post("/pvpc/al-entrar")
+def pvpc_al_entrar():
+    """Lo llama la interfaz al abrirse: completa los huecos de precios si los hay."""
+    return pvpc.al_entrar()
+
+
 @router.get("/pvpc/dia")
 def precios_dia(s: SessionDep, dia: date):
     ini, fin = limites_utc(dia, dia)

@@ -81,7 +81,8 @@ Todos tus datos están en la carpeta `data/`. Para hacer una copia basta con cop
 
 ### Consumo de recursos
 
-Un solo contenedor con unos 50 MB de RAM en reposo y la CPU prácticamente a 0 %. Tiene un límite de
+Un solo contenedor con unos 60 MB de RAM en reposo y la CPU prácticamente a 0 %: no hay tareas periódicas,
+solo trabaja cuando la usas. Tiene un límite de
 256 MB de memoria y un núcleo, así que nunca acapara la Raspberry. Los registros se limitan para no gastar
 la tarjeta SD.
 
@@ -111,11 +112,19 @@ también irán ahí. **El archivo `.env` y la carpeta `data/` nunca se suben al 
 
 ### Precio del PVPC
 
-No hay que hacer nada: la aplicación descarga los precios de Red Eléctrica al arrancar y cada 6 horas.
-La primera vez baja algo más de un año, en un par de minutos. Para comparar facturas más antiguas,
-ve a **Ajustes → Precios del PVPC** y elige una fecha de inicio (como muy pronto, junio de 2021).
+No hay que hacer nada. **Cada vez que abres la aplicación**, busca los días que faltan desde la última vez
+y los descarga de Red Eléctrica mientras sigues usándola (verás un aviso abajo con el progreso). Mientras no la
+usas no consulta nada, así que en reposo no gasta ni CPU ni red.
 
-En **Precio PVPC** ves el precio de cada hora de hoy y de mañana (se publica sobre las 20:30), con su periodo.
+- La primera vez descarga algo más de un año, en un par de minutos.
+- Si añades facturas más antiguas que los precios guardados, la siguiente vez completa también esas fechas.
+- Los precios de mañana se piden a partir de las 20:45, cuando ya están publicados.
+- Si abres la aplicación varias veces seguidas, no vuelve a preguntar hasta pasados 10 minutos.
+
+Para forzar una descarga o bajar un periodo concreto (como muy pronto, desde junio de 2021),
+ve a **Ajustes → Precios del PVPC**.
+
+En **Precio PVPC** ves el precio de cada hora de hoy y de mañana, con su periodo.
 
 ### Consumo horario
 

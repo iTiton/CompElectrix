@@ -77,11 +77,17 @@ export function Vacio({ icono, titulo, children }: { icono: ReactNode; titulo: s
   );
 }
 
-/** Carga datos de la API con estado de carga y error. */
-export function useDatos<T>(ruta: string | null, deps: unknown[] = []) {
+/** Carga datos de la API con estado de carga y error. Con `eventos`, se recarga cuando ocurren. */
+export function useDatos<T>(ruta: string | null, deps: unknown[] = [], eventos: string[] = []) {
   const [datos, setDatos] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [n, setN] = useState(0);
+  useEffect(() => {
+    const r = () => setN((x) => x + 1);
+    eventos.forEach((e) => window.addEventListener(e, r));
+    return () => eventos.forEach((e) => window.removeEventListener(e, r));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventos.join()]);
   useEffect(() => {
     if (!ruta) return;
     let vivo = true;

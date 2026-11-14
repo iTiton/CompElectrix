@@ -171,7 +171,8 @@ function TarjetaPvpc() {
     <div className="tarjeta">
       <h3 className="flex items-center gap-2 font-semibold"><RefreshCw size={16} className="text-acento-600" /> Precios del PVPC</h3>
       <p className="mt-1 text-sm text-zinc-500">
-        Se descargan solos de Red Eléctrica al arrancar y cada 6 horas. No necesitan clave.
+        Cada vez que abres la aplicación se descargan de Red Eléctrica los días que falten desde el último uso.
+        No necesitan clave y en reposo no se consulta nada.
       </p>
       {datos && (
         <dl className="mt-4 grid grid-cols-2 gap-2 text-sm">

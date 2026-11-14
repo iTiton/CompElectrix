@@ -1,6 +1,7 @@
 import { BarChart3, Clock, Home, Laptop, Menu, Moon, Settings, Sun, Tags, Zap } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import AvisoActualizacion from "./components/AvisoActualizacion";
 import Ajustes from "./pages/Ajustes";
 import DomicilioPage from "./pages/Domicilio";
 import Inicio from "./pages/Inicio";
@@ -58,6 +59,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen md:flex">
+      <AvisoActualizacion />
       <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 md:hidden dark:border-zinc-800 dark:bg-zinc-900">
         <Logo />
         <button className="btn p-2" onClick={() => setMenu(!menu)} aria-label="Menú"><Menu size={20} /></button>

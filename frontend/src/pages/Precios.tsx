@@ -4,6 +4,7 @@ import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis
 import { api, type DiaPvpc, type EstadoPvpc } from "../api";
 import { Aviso, Cabecera, num, useDatos, Vacio } from "../components/ui";
 import { COLOR_PERIODO, NOMBRE_PERIODO } from "../periodos";
+import { EVENTO_PVPC } from "../components/AvisoActualizacion";
 
 const EJE = { fill: "#71717a", fontSize: 12 };
 
@@ -18,8 +19,8 @@ const cent = (eurKwh: number | undefined | null) => (eurKwh == null ? "—" : `$
 export default function Precios() {
   const hoy = iso(new Date());
   const [dia, setDia] = useState(hoy);
-  const { datos, error } = useDatos<DiaPvpc>(`/pvpc/dia?dia=${dia}`);
-  const estado = useDatos<EstadoPvpc>("/pvpc/estado");
+  const { datos, error } = useDatos<DiaPvpc>(`/pvpc/dia?dia=${dia}`, [], [EVENTO_PVPC]);
+  const estado = useDatos<EstadoPvpc>("/pvpc/estado", [], [EVENTO_PVPC]);
   const [lanzado, setLanzado] = useState(false);
 
   const actualizar = async () => {
@@ -53,7 +54,7 @@ export default function Precios() {
         <Vacio icono={<Zap />} titulo="Sin precios para este día">
           {dia > hoy
             ? "Los precios de mañana se publican cada día hacia las 20:30."
-            : "Pulsa «Actualizar» para descargarlos. La aplicación también lo hace sola cada pocas horas."}
+            : "Pulsa «Actualizar» para descargarlos. La aplicación también completa los que falten cada vez que la abres."}
         </Vacio>
       ) : datos ? (
         <>
