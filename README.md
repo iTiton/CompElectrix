@@ -124,3 +124,11 @@ Estructura:
 - `backend/app/servicios.py`: lógica de la comparativa.
 - `backend/app/api.py`: API REST bajo `/api` (documentación interactiva en `/docs`).
 - `frontend/src/`: interfaz en React, Tailwind y Recharts.
+
+## Licencia
+
+CompElectrix es software libre bajo la [GNU General Public License v3.0 o posterior](LICENSE)
+(GPL-3.0-or-later). Puedes usarlo, estudiarlo, modificarlo y redistribuirlo, pero cualquier versión
+modificada que distribuyas debe publicarse también con la misma licencia y con su código fuente.
+
+Se ofrece **sin ninguna garantía**: los cálculos son orientativos.
