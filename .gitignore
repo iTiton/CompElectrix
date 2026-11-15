@@ -1,0 +1,14 @@
+# Datos personales: nunca al repositorio
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+
+# Entornos y compilados
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+frontend/dist/
+*.tsbuildinfo

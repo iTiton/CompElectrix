@@ -1,0 +1,22 @@
+# Para usar CompElectrix detrás del portal Wall-O (se duerme cuando no se usa).
+# Actívalo poniendo en el archivo .env:   COMPOSE_FILE=docker-compose.yml:docker-compose.wallo.yml
+# Requisito: Wall-O instalado y arrancado antes (crea la red «wallo»).
+services:
+  compelectrix:
+    ports: !reset []            # sin puerto propio: solo se entra por el portal
+    networks:
+      - wallo
+    labels:
+      wallo.activar: "true"
+      wallo.puerto: "8101"              # https://tu-nas…:8101 a través del portal
+      wallo.puerto_interno: "8000"
+      wallo.nombre: CompElectrix
+      wallo.descripcion: Tarifas y consumo eléctrico
+      wallo.icono: rayo
+      wallo.salud: /api/salud
+      wallo.dormir_tras: "15"           # minutos sin uso antes de dormirse
+      wallo.orden: "10"
+
+networks:
+  wallo:
+    external: true

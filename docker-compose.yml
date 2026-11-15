@@ -1,0 +1,20 @@
+services:
+  compelectrix:
+    build: .
+    image: compelectrix:latest
+    container_name: compelectrix
+    restart: unless-stopped
+    ports:
+      - "${COMPELECTRIX_PUERTO:-8000}:8000"
+    volumes:
+      - ./data:/data          # base de datos y archivos: haz copia de esta carpeta
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TZ=Europe/Madrid
+    mem_limit: 256m           # nunca usará más de 256 MB de la Raspberry
+    cpus: 1.0                 # como máximo 1 de los 4 núcleos
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "2" }   # registros pequeños: cuida la tarjeta SD
