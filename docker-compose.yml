@@ -18,10 +18,3 @@ services:
     logging:
       driver: json-file
       options: { max-size: "1m", max-file: "2" }   # registros pequeños: cuida la tarjeta SD
-    labels:
-      # Para la página de inicio "Homepage" (gethomepage.dev), si la usas
-      homepage.group: Hogar
-      homepage.name: CompElectrix
-      homepage.icon: mdi-lightning-bolt
-      homepage.href: http://raspberrypi:8000
-      homepage.description: Tarifas y consumo eléctrico

@@ -32,9 +32,8 @@ Todo el texto de la interfaz, el código y la documentación va en español.
 - Pendiente:
   - **Fase 3**: leer facturas en PDF, foto o texto, con IA opcional. Necesita facturas reales de Octopus anonimizadas.
     La API de Octopus también expone las facturas en PDF (`account.bills` → `attachments.temporaryUrl`).
-  - **Portal** (repositorio aparte, pendiente de que la persona usuaria lo cree y dé acceso): proceso Python siempre
-    encendido (~25–30 MB), un puerto por herramienta (franja 8100–8199), despierta los contenedores al entrar y los
-    apaga tras X minutos sin uso; solo controla los contenedores con etiquetas propias.
+  - **Portal Wall-O** (repositorio iTiton/Wall-O): CompElectrix se integra con `docker-compose.wallo.yml`
+    (activado con `COMPOSE_FILE` en `.env`). Se entra por el puerto 8101 y se duerme tras 15 minutos sin uso.
   - **HTTPS y acceso**: la VPN y el certificado están en un NAS Synology (dominio `*.synology.me`, no ponerlo en el
     repositorio). Proxy inverso de DSM, una regla por puerto, hacia la Raspberry. Hace falta el paquete DNS Server de DSM
     para que el nombre apunte al NAS dentro de la VPN. Sin confirmar: qué puertos redirige su router y qué protocolo usa la VPN.

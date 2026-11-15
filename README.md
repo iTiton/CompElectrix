@@ -96,7 +96,7 @@ de lo que hayas borrado.
 ### Consumo de recursos
 
 Un solo contenedor con unos 60 MB de RAM en reposo y la CPU prácticamente a 0 %: no hay tareas periódicas,
-solo trabaja cuando la usas. Tiene un límite de
+solo trabaja cuando la usas. Con Wall-O, cuando no se usa se apaga y gasta 0 MB. Tiene un límite de
 256 MB de memoria y un núcleo, así que nunca acapara la Raspberry. Los registros se limitan para no gastar
 la tarjeta SD.
 
@@ -109,10 +109,16 @@ CompElectrix puede vivir en una subruta, por ejemplo `https://raspberry/compelec
 
 La interfaz construye entonces todas sus direcciones relativas a esa ruta. Sin la cabecera funciona igual en la raíz.
 
-### Página de inicio con varias herramientas
+### Con el portal Wall-O (recomendado si tienes varias herramientas)
 
-El `docker-compose.yml` incluye etiquetas para [Homepage](https://gethomepage.dev). Si lo usas, CompElectrix
-aparece sola en tu panel de inicio.
+[Wall-O](https://github.com/iTiton/Wall-O) es un portal que duerme las herramientas cuando no se usan
+(0 MB de memoria) y las despierta al entrar, en 2-4 segundos.
+
+1. Instala y arranca Wall-O primero (ver su README).
+2. En la carpeta de CompElectrix, copia `.env.example` como `.env` y quita la almohadilla de la línea `COMPOSE_FILE=…`.
+3. `docker compose up -d`.
+
+CompElectrix aparecerá en la página de inicio de Wall-O y se abrirá en el puerto **8101**.
 
 ## Configuración
 
