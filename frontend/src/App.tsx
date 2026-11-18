@@ -1,4 +1,4 @@
-import { BarChart3, Clock, Home, Laptop, Menu, Moon, Settings, Sun, Tags, Zap } from "lucide-react";
+import { BarChart3, Clock, Home, LayoutGrid, Laptop, Menu, Moon, Settings, Sun, Tags, Zap } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import AvisoActualizacion from "./components/AvisoActualizacion";
@@ -10,6 +10,13 @@ import Tarifas from "./pages/Tarifas";
 // La comparativa lleva las gráficas (la parte más pesada): se carga solo al abrirla
 const ComparativaPage = lazy(() => import("./pages/Comparativa"));
 const Precios = lazy(() => import("./pages/Precios"));
+
+/** Dirección de la portada de Wall-O si la aplicación se abrió a través del portal. */
+function urlPortal(): string | null {
+  const puerto = document.querySelector('meta[name="wallo-portal"]')?.getAttribute("content");
+  return puerto ? `${location.protocol}//${location.hostname}:${puerto}/` : null;
+}
+const PORTAL = urlPortal();
 
 type Tema = "claro" | "oscuro" | "sistema";
 
@@ -62,7 +69,12 @@ export default function App() {
       <AvisoActualizacion />
       <header className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 md:hidden dark:border-zinc-800 dark:bg-zinc-900">
         <Logo />
-        <button className="btn p-2" onClick={() => setMenu(!menu)} aria-label="Menú"><Menu size={20} /></button>
+        <div className="flex items-center gap-1">
+          {PORTAL && (
+            <a className="btn p-2" href={PORTAL} aria-label="Volver al portal" title="Volver al portal"><LayoutGrid size={20} /></a>
+          )}
+          <button className="btn p-2" onClick={() => setMenu(!menu)} aria-label="Menú"><Menu size={20} /></button>
+        </div>
       </header>
       <aside
         className={`${menu ? "block" : "hidden"} border-r border-zinc-200 bg-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col dark:border-zinc-800 dark:bg-zinc-900`}
@@ -86,7 +98,15 @@ export default function App() {
             </NavLink>
           ))}
         </nav>
-        <div className="p-3">
+        <div className="space-y-2 p-3">
+          {PORTAL && (
+            <a
+              href={PORTAL}
+              className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            >
+              <LayoutGrid size={18} /> Volver al portal
+            </a>
+          )}
           <div className="flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
             {temas.map(({ v, i: I, t }) => (
               <button
