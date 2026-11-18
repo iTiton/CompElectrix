@@ -156,7 +156,7 @@ async function leerTexto(f: File): Promise<string> {
   return utf8.includes("�") ? new TextDecoder("windows-1252").decode(buf) : utf8;
 }
 
-interface Cred {
+export interface Cred {
   usuario: string;
   clave: string;
 }
@@ -165,7 +165,7 @@ interface Cred {
  * Formulario de acceso estándar (usuario + contraseña con sus atributos `autocomplete`) para que
  * 1Password, Bitwarden o el propio navegador lo rellenen. Nada se guarda en el servidor.
  */
-function Acceso({ servicio, etiquetaUsuario, tipoUsuario, nombre, ayuda, enviar }: {
+export function Acceso({ servicio, etiquetaUsuario, tipoUsuario, nombre, ayuda, enviar }: {
   servicio: string; etiquetaUsuario: string; tipoUsuario: "text" | "email"; nombre: string; ayuda: string;
   enviar: (c: Cred) => Promise<void>;
 }) {

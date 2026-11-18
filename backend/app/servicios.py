@@ -439,7 +439,9 @@ def sincronizar_potencia_actual(s: Session, dom: Domicilio) -> None:
 
 
 def guardar_tramos_importados(s: Session, dom: Domicilio, tramos: list[dict], origen: str) -> int:
-    """Sustituye los tramos de un origen (octopus, datadis) por los recién importados. Los manuales no se tocan."""
+    """Sustituye los tramos de un origen (octopus, datadis) por los recién importados. Los manuales no se tocan.
+    Los tramos seguidos con la misma potencia se juntan en uno (Octopus crea un contrato por cada cambio de precios)."""
+    tramos = juntar_tramos(tramos)
     for p in s.exec(select(PotenciaContratada).where(
         PotenciaContratada.domicilio_id == dom.id, PotenciaContratada.origen == origen
     )):  # fmt: skip
@@ -486,3 +488,102 @@ def importes_calculados(s: Session, dom: Domicilio) -> dict:
         d = calcular(a_consumo(f), precios, vig, f.fecha_emision)
         importes[f.id] = {"total": round(d.total, 2), "tarifa": t.nombre, "precision": precision}
     return {"importes": importes, "tarifa_actual": actual.nombre if actual else None}
+
+
+# ======================================== Facturas reales traídas de Octopus
+def _kwh_por_periodo(s: Session, domicilio_id: int, desde: date, hasta: date) -> tuple[dict[str, float], int, int]:
+    """kWh por periodo del consumo horario entre dos días (incluidos), horas con dato y horas esperadas."""
+    ini, fin = limites_utc(desde, hasta)
+    kwh = {"p1": 0.0, "p2": 0.0, "p3": 0.0}
+    n = 0
+    q = select(ConsumoHorario).where(
+        ConsumoHorario.domicilio_id == domicilio_id, ConsumoHorario.inicio_utc >= ini, ConsumoHorario.inicio_utc < fin
+    )
+    for c in s.exec(q):
+        kwh[periodo_utc(c.inicio_utc)] += c.kwh
+        n += 1
+    return kwh, n, horas_esperadas(desde, hasta)
+
+
+def elegir_fin(s: Session, domicilio_id: int, f: dict) -> tuple[date, str]:
+    """Octopus no siempre incluye el último día del periodo. Se decide comparando los kWh facturados con el
+    consumo horario contando y sin contar ese día; sin kWh, se usa lo visto en sus facturas (lo incluye
+    solo cuando el periodo termina el 31 de diciembre)."""
+    con = f["hasta"]
+    sin = f["hasta"] - timedelta(days=1) if f["hasta"] > f["desde"] else f["hasta"]
+    if f.get("kwh"):
+        k_con = sum(_kwh_por_periodo(s, domicilio_id, f["desde"], con)[0].values())
+        k_sin = sum(_kwh_por_periodo(s, domicilio_id, f["desde"], sin)[0].values())
+        if k_con or k_sin:
+            return (con, "kwh") if abs(k_con - f["kwh"]) < abs(k_sin - f["kwh"]) else (sin, "kwh")
+    return (con if (f["hasta"].month, f["hasta"].day) == (12, 31) else sin), "regla"
+
+
+def importar_facturas_octopus(s: Session, dom: Domicilio, facturas: list[dict]) -> dict:
+    """Crea (o actualiza) una factura por cada factura de Octopus, con su periodo, emisión y total reales.
+
+    Los kWh por periodo salen del consumo horario de esas fechas. Sustituye a las facturas mensuales creadas desde
+    el consumo que se solapen; las introducidas a mano no se tocan.
+    """
+    existentes = list(s.exec(select(Factura).where(Factura.domicilio_id == dom.id)))
+    por_numero = {f.numero: f for f in existentes if f.origen == "octopus" and f.numero}
+    tramos = tramos_potencia(s, dom.id)
+    creadas = actualizadas = sustituidas = 0
+    omitidas: list[str] = []
+    for fo in facturas:
+        etiqueta = f"{fo['desde']:%d/%m/%Y}–{fo['hasta']:%d/%m/%Y}"
+        fin, _metodo = elegir_fin(s, dom.id, fo)
+        kwh, horas, esperadas = _kwh_por_periodo(s, dom.id, fo["desde"], fin)
+        if horas < esperadas:
+            omitidas.append(f"{etiqueta} (consumo horario incompleto: {horas}/{esperadas} h)")
+            continue
+        manual = next(
+            (f for f in existentes if f.origen not in ("horario", "octopus") and f.fecha_inicio <= fin and fin_efectivo(f) >= fo["desde"]),
+            None,
+        )
+        if manual:
+            omitidas.append(f"{etiqueta} (ya hay una factura introducida a mano en esas fechas)")
+            continue
+        solapadas = [
+            f for f in existentes if f.origen == "horario" and f.fecha_inicio <= fin and fin_efectivo(f) >= fo["desde"]
+        ]
+        for f in solapadas:
+            s.delete(f)
+            sustituidas += 1
+        existentes = [f for f in existentes if f not in solapadas]
+        kw1, kw2 = potencia_media(tramos, fo["desde"], fin, (dom.potencia_p1_kw, dom.potencia_p2_kw))
+        datos = {
+            "fecha_inicio": fo["desde"], "fecha_fin": fo["hasta"], "dias": (fin - fo["desde"]).days + 1,
+            "fecha_emision": fo["emision"], "kwh_p1": round(kwh["p1"], 3), "kwh_p2": round(kwh["p2"], 3),
+            "kwh_p3": round(kwh["p3"], 3), "kw_p1": kw1, "kw_p2": kw2, "importe_total": fo["total"],
+            "comercializadora": "Octopus Energy",
+        }  # fmt: skip
+        nota = f"Factura de Octopus. kWh facturados: {fo['kwh']}" if fo.get("kwh") is not None else "Factura de Octopus."
+        if fo["id"] in por_numero:
+            f = por_numero[fo["id"]]
+            for k, v in datos.items():
+                setattr(f, k, v)
+            f.notas = nota
+            actualizadas += 1
+        else:
+            f = Factura(domicilio_id=dom.id, numero=fo["id"], origen="octopus", notas=nota, **datos)
+            creadas += 1
+        s.add(f)
+    s.commit()
+    return {"creadas": creadas, "actualizadas": actualizadas, "sustituidas": sustituidas, "omitidas": omitidas}
+
+
+def juntar_tramos(tramos: list[dict]) -> list[dict]:
+    """Une tramos seguidos (o solapados) con la misma potencia en uno solo."""
+    salida: list[dict] = []
+    for t in sorted(tramos, key=lambda x: x["desde"]):
+        if salida:
+            prev = salida[-1]
+            misma = (prev["kw_p1"], prev["kw_p2"]) == (t["kw_p1"], t["kw_p2"])
+            pegado = prev["hasta"] is None or t["desde"] <= prev["hasta"] + timedelta(days=1)
+            if misma and pegado:
+                if prev["hasta"] is not None:
+                    prev["hasta"] = None if t["hasta"] is None else max(prev["hasta"], t["hasta"])
+                continue
+        salida.append(dict(t))
+    return salida

@@ -106,6 +106,21 @@ class ClienteOctopus:
         """Potencia contratada en cada contrato, con sus fechas (para el historial de potencias)."""
         return interpretar_potencias(self._consulta(CONSULTA_POTENCIAS, {"cuenta": cuenta}), propiedad_id)
 
+    def facturas(self, cuenta: str) -> list[dict]:
+        """Facturas de la cuenta, de la más antigua a la más reciente."""
+        salida, despues = [], None
+        for _ in range(40):  # límite de seguridad: 1.000 facturas
+            d = self._consulta(CONSULTA_FACTURAS, {"cuenta": cuenta, "despues": despues})
+            b = (d.get("account") or {}).get("bills") or {}
+            for e in b.get("edges") or []:
+                f = interpretar_factura(e.get("node") or {})
+                if f:
+                    salida.append(f)
+            if not (b.get("pageInfo") or {}).get("hasNextPage"):
+                break
+            despues = b["pageInfo"]["endCursor"]
+        return sorted(salida, key=lambda f: f["desde"])
+
     def consumos(self, propiedad_id: str, desde: date, hasta: date) -> list[tuple[datetime, float, bool]]:
         """Horas de consumo como (inicio UTC sin zona, kWh, real)."""
         horas: list[tuple[datetime, float, bool]] = []
@@ -196,3 +211,66 @@ def interpretar_potencias(datos: dict, propiedad_id: str) -> list[dict]:
     return sorted(tramos, key=lambda t: t["desde"])
 
 
+
+
+CONSULTA_FACTURAS = """
+query($cuenta: String!, $despues: String) {
+  account(accountNumber: $cuenta) {
+    bills(first: 25, after: $despues, includeBillsWithoutPDF: true) {
+      pageInfo { hasNextPage endCursor }
+      edges { node {
+        id billType fromDate toDate issuedDate
+        ... on StatementType {
+          totalCharges { grossTotal }
+          transactions(first: 100) { edges { node {
+            __typename
+            ... on Charge { consumption { startDate endDate quantity unit } }
+          } } }
+        }
+        ... on InvoiceType {
+          grossAmount totalCharges { grossTotal }
+          transactions(first: 100) { edges { node {
+            __typename
+            ... on BillCharge { consumption { startDate endDate quantity unit } }
+          } } }
+        }
+        ... on PeriodBasedDocumentType {
+          totalCharges { grossTotal }
+          transactions(first: 100) { edges { node {
+            __typename
+            ... on BillCharge { consumption { startDate endDate quantity unit } }
+          } } }
+        }
+      } }
+    }
+  }
+}"""
+
+
+def interpretar_factura(nodo: dict) -> dict | None:
+    """Datos útiles de una factura de Octopus: periodo, emisión, total (€) y kWh facturados (si vienen)."""
+    if not nodo.get("fromDate") or not nodo.get("toDate"):
+        return None
+    if nodo.get("billType") in ("CREDIT_NOTE",):
+        return None
+    total = (nodo.get("totalCharges") or {}).get("grossTotal")
+    if total is None:
+        total = nodo.get("grossAmount")
+    kwh = 0.0
+    hay_kwh = False
+    for e in ((nodo.get("transactions") or {}).get("edges")) or []:
+        c = (e.get("node") or {}).get("consumption") or {}
+        if c.get("quantity") is not None and str(c.get("unit", "")).upper().startswith("KWH"):
+            try:
+                kwh += float(c["quantity"])
+                hay_kwh = True
+            except (TypeError, ValueError):
+                pass
+    return {
+        "id": str(nodo.get("id")),
+        "desde": date.fromisoformat(nodo["fromDate"]),
+        "hasta": date.fromisoformat(nodo["toDate"]),
+        "emision": date.fromisoformat(nodo["issuedDate"]) if nodo.get("issuedDate") else None,
+        "total": round(total / 100, 2) if total is not None else None,  # céntimos → €
+        "kwh": round(kwh, 3) if hay_kwh else None,
+    }
