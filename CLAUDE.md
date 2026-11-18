@@ -46,6 +46,8 @@ Todo el texto de la interfaz, el código y la documentación va en español.
 
 ## Estado
 
+- Última versión fusionada: **1.06** (18/11/2026). Pendiente de que la persona usuaria pruebe con su cuenta: la
+  importación de **facturas de Octopus** (1.05) y la comparativa «con lo que pagué».
 - Fase 1 ✅ domicilios, facturas, tarifas, motor 2.0TD, comparativa, tema claro/oscuro.
 - Fase 2 ✅ PVPC de REE (REData, con reintentos ante su antibots), consumo horario desde CSV, Datadis y Octopus.
   **Octopus probado con la cuenta real de la persona usuaria** (18/11/2026: ~13.500 horas importadas, de mayo de 2025
