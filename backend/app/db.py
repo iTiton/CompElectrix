@@ -34,10 +34,18 @@ VIGENCIAS_INICIALES = [
         fecha_desde=date(2021, 6, 1),
         fecha_hasta=date(2026, 6, 25),
         bono_social_eur_anio=6.979247,
+        nota="Tipos ordinarios (IEE 5,11269632 %, IVA 21 %).",
+    ),
+    REBAJA_2026 := VigenciaRegulada(
+        fecha_desde=date(2026, 3, 22),
+        fecha_hasta=date(2026, 5, 31),
+        iee_pct=0.5,
+        iee_minimo_eur_mwh=1.0,
+        iva_pct=10.0,
+        bono_social_eur_anio=6.979247,
         nota=(
-            "Tipos ordinarios (IEE 5,11269632 %, IVA 21 %). Entre marzo y mayo de 2026 hubo una "
-            "rebaja temporal (RDL 7/2026: IEE 0,5 %, IVA 10 %): añádela con las fechas exactas "
-            "que figuren en tus facturas."
+            "Rebaja temporal del RDL 7/2026: IVA 10 % e impuesto eléctrico 0,5 % (mínimo 1 €/MWh). "
+            "Desde el 22/03/2026 (AEAT); hasta el 31/05/2026, comprobado con facturas reales de Octopus."
         ),
     ),
     VigenciaRegulada(
@@ -69,6 +77,12 @@ def _migrar(s: Session) -> None:
     if not s.get(Ajuste, "migracion_iee_sin_bono"):
         s.exec(text("UPDATE vigenciaregulada SET iee_incluye_bono_social = 0"))  # type: ignore[call-overload]
         s.add(Ajuste(clave="migracion_iee_sin_bono", valor="hecha"))
+    # 1.04: rebaja de impuestos de 2026, ya con fechas confirmadas
+    if not s.get(Ajuste, "migracion_rebaja_2026"):
+        ya = s.exec(select(VigenciaRegulada).where(VigenciaRegulada.iva_pct == 10.0)).first()
+        if not ya and s.exec(select(VigenciaRegulada)).first():
+            s.add(VigenciaRegulada.model_validate(REBAJA_2026))
+        s.add(Ajuste(clave="migracion_rebaja_2026", valor="hecha"))
     s.commit()
 
 

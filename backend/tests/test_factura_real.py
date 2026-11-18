@@ -92,3 +92,22 @@ def test_importe_calculado_en_la_lista_de_facturas():
         assert r["importes"][str(f["id"])]["total"] == pytest.approx(67.48, abs=0.01)
         c.delete(f"/api/domicilios/{i}")
         c.delete(f"/api/tarifas/{t}")
+
+
+def test_factura_con_la_rebaja_de_impuestos_de_2026():
+    """Última factura «REDUCIDO» de Octopus: 20/04–20/05/2026. IVA 10 % e IEE al mínimo de 1 €/MWh."""
+    with TestClient(app) as c:
+        vig = c.get("/api/vigencias").json()
+        rebaja = [v for v in vig if v["iva_pct"] == 10]
+        assert len(rebaja) == 1 and rebaja[0]["fecha_desde"] == "2026-03-22" and rebaja[0]["fecha_hasta"] == "2026-05-31"
+
+        t = c.post("/api/tarifas", json=TARIFA).json()["id"]
+        i = c.post("/api/domicilios", json={"nombre": "Rebaja"}).json()["id"]
+        f = c.post("/api/facturas", json={"domicilio_id": i, "fecha_inicio": "2026-04-20", "fecha_fin": "2026-05-20", "dias": 30,
+                                          "kwh_p1": 50, "kwh_p2": 50, "kwh_p3": 150, "kw_p1": 4.5, "kw_p2": 4.5}).json()  # fmt: skip
+        d = c.get(f"/api/facturas/{f['id']}/simular/{t}").json()
+        # 0,5 % de la base (~0,23 €) es menos que 250 kWh × 1 €/MWh = 0,25 €: se aplica el mínimo, como en la factura
+        assert d["iee"] == pytest.approx(0.25, abs=0.001)
+        assert d["iva"] == pytest.approx(d["base_iva"] * 0.10, abs=0.01)
+        c.delete(f"/api/domicilios/{i}")
+        c.delete(f"/api/tarifas/{t}")

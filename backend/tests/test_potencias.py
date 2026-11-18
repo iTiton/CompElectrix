@@ -83,3 +83,19 @@ def test_interpretar_contratos_de_datadis():
         (date(2025, 12, 12), date(2026, 2, 11), 3.5, 3.5),
         (date(2026, 2, 12), None, 4.5, 4.6),
     ]
+
+
+def test_octopus_devuelve_la_potencia_como_lista():
+    """Formato real visto en una cuenta de Octopus: contractualMaxPower es una lista (P1, P2)."""
+    datos = {"account": {"properties": [{"id": "77", "electricitySupplyPoints": [{"cups": "ES1", "agreements": [
+        {"validFrom": "2025-12-12T00:00:00+01:00", "validTo": "2026-02-12T00:00:00+01:00", "details": {"contractualMaxPower": ["3.5", "3.5"]}},
+        {"validFrom": "2026-02-12T00:00:00+01:00", "validTo": None, "details": {"contractualMaxPower": [4.5, 4.6]}},
+        {"validFrom": "2026-03-01T00:00:00+01:00", "validTo": None, "details": {"contractualMaxPower": []}},
+        {"validFrom": "2026-04-01T00:00:00+01:00", "validTo": None, "details": {"contractualMaxPower": ["4500"]}},
+    ]}]}]}}  # fmt: skip
+    t = interpretar_potencias(datos, "77")
+    assert [(x["desde"], x["kw_p1"], x["kw_p2"]) for x in t] == [
+        (date(2025, 12, 12), 3.5, 3.5),
+        (date(2026, 2, 12), 4.5, 4.6),
+        (date(2026, 4, 1), 4.5, 4.5),
+    ]
