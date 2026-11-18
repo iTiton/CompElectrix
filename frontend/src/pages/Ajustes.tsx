@@ -1,9 +1,10 @@
 import { Download, HardDrive, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { api, urlApi, type EstadoPvpc, type Vigencia } from "../api";
-import { Aviso, Cabecera, Campo, fecha, Modal, num, useDatos } from "../components/ui";
+import { Aviso, Cabecera, Campo, fecha, Modal, num, useDatos, useVersion } from "../components/ui";
 
 export default function Ajustes() {
+  const version = useVersion();
   const { datos, recargar } = useDatos<Vigencia[]>("/vigencias");
   const [editar, setEditar] = useState<Vigencia | "nueva" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,19 @@ export default function Ajustes() {
 
   return (
     <>
-      <Cabecera titulo="Ajustes" sub="Fuentes de datos, conexiones y parámetros regulados." />
+      <Cabecera titulo="Ajustes" sub="Fuentes de datos, conexiones y parámetros regulados.">
+        {version && (
+          <a
+            className="rounded-full border border-zinc-200 px-3 py-1 text-xs text-zinc-500 hover:border-acento-400 hover:text-acento-600 dark:border-zinc-700"
+            href="https://github.com/iTiton/CompElectrix/pulls?q=is%3Apr+is%3Amerged"
+            target="_blank"
+            rel="noreferrer"
+            title="Ver los cambios de cada versión en GitHub"
+          >
+            Versión {version}
+          </a>
+        )}
+      </Cabecera>
       <div className="mb-6 grid gap-6 lg:grid-cols-2">
         <TarjetaPvpc />
         <div className="tarjeta">

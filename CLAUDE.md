@@ -57,6 +57,8 @@ Todo el texto de la interfaz, el código y la documentación va en español.
 - La siguiente versión (1.01, 1.02…) se trabaja en una rama aparte. Cuando está madura, se crea una pull request
   hacia `main` y la fusiona Claude cuando la persona usuaria lo pide. Después, la siguiente versión empieza en otra rama.
 - No subir nada directamente a `main`.
+- **Número de versión**: `backend/app/version.py`. Se pone el de la versión en curso al empezarla (p. ej. 1.04) y se
+  comprueba antes de fusionar. Se ve en el menú lateral, en Ajustes y en la portada de Wall-O (vía `/api/salud`).
 
 ## Comprobaciones antes de entregar
 

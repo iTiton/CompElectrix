@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlmodel import Session, SQLModel, delete, func, select
 
 from . import copias, pvpc, servicios
+from .version import VERSION
 from .db import DATA_DIR, compactar, ficheros_bd, get_session
 from .fuentes.datadis import ClienteDatadis, ErrorDatadis
 from .fuentes.octopus import ClienteOctopus, ErrorOctopus
@@ -275,7 +276,7 @@ def borrar_vigencia(id_: int, s: SessionDep):
 
 @router.get("/salud")
 def salud():
-    return {"estado": "ok"}
+    return {"estado": "ok", "version": VERSION}
 
 
 # ======================================================================= PVPC
