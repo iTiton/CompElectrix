@@ -82,3 +82,27 @@ def test_generar_facturas_y_sin_precios():
             id_pvpc = pvpc.asegurar_tarifa_pvpc(s).id
         r = c.post("/api/comparativa", json={"domicilio_id": dom, "tarifa_ids": [id_pvpc]}).json()
         assert r["tarifas"] == [] and any("faltan precios" in a for a in r["avisos"])
+
+
+def test_modo_pagado_y_aviso_del_pvpc():
+    """«Con lo que pagué»: solo facturas con importe real, frente al PVPC real de esas fechas."""
+    with TestClient(app) as c:
+        id_pvpc = _precios_enero()
+        dom = c.post("/api/domicilios", json={"nombre": "Pagado"}).json()["id"]
+        c.post(f"/api/domicilios/{dom}/consumo/csv", json={"contenido": _csv_enero(nocturno=True)})
+        base = {"domicilio_id": dom, "kwh_p1": 50, "kwh_p2": 60, "kwh_p3": 190, "kw_p1": 3.45, "kw_p2": 3.45}
+        c.post("/api/facturas", json={**base, "fecha_inicio": "2025-01-01", "fecha_fin": "2025-01-31", "importe_total": 500.0})
+        # Sin importe real: no entra en el modo «pagado»
+        c.post("/api/facturas", json={**base, "fecha_inicio": "2025-02-01", "fecha_fin": "2025-02-28"})
+
+        r = c.post("/api/comparativa", json={"domicilio_id": dom, "tarifa_ids": [id_pvpc], "modo": "pagado"}).json()
+        assert r["resumen"]["num_facturas"] == 1 and r["resumen"]["referencia"] == "importe_real"
+        real = next(t for t in r["tarifas"] if t["es_real"])
+        assert real["nombre"] == "Lo que pagaste" and real["total_periodo"] == 500.0
+        pvpc = next(t for t in r["tarifas"] if t["tipo"] == "pvpc")
+        assert pvpc["posicion"] == 1 and pvpc["ahorro_periodo"] > 0
+        assert any("PVPC" in a and "mercado" in a for a in r["avisos"])
+
+        r = c.post("/api/comparativa", json={"domicilio_id": dom, "tarifa_ids": [id_pvpc], "modo": "hoy"}).json()
+        assert not any(t.get("es_real") for t in r["tarifas"])
+        c.delete(f"/api/domicilios/{dom}")

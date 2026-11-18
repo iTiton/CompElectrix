@@ -64,13 +64,28 @@ def comparar(
     desde: date | None = None,
     hasta: date | None = None,
     tarifa_ids: list[int] | None = None,
+    modo: str = "hoy",
 ) -> dict:
+    """Compara las tarifas sobre las facturas del domicilio.
+
+    modo «hoy»: referencia = la tarifa actual con sus precios de hoy (para decidir de cara al futuro).
+    modo «pagado»: solo facturas con importe real; referencia = lo que se pagó de verdad, frente a cada tarifa
+    (el PVPC, con sus precios reales de esas fechas): pasado contra pasado.
+    """
     q = select(Factura).where(Factura.domicilio_id == domicilio.id)
     if desde:
         q = q.where(Factura.fecha_fin >= desde)
     if hasta:
         q = q.where(Factura.fecha_inicio <= hasta)
     facturas = list(s.exec(q.order_by(Factura.fecha_inicio)))
+    if modo == "pagado":
+        facturas = [f for f in facturas if f.importe_total is not None]
+        if not facturas:
+            return {
+                "domicilio": {"id": domicilio.id, "nombre": domicilio.nombre}, "facturas": [], "tarifas": [],
+                "resumen": None,
+                "avisos": ["No hay facturas con importe real en ese periodo. Tráelas de Octopus o anota lo que pagaste en cada factura."],
+            }  # fmt: skip
 
     qt = select(Tarifa)
     if tarifa_ids:
@@ -117,9 +132,9 @@ def comparar(
                 r = horarios.precios_energia_pvpc(f)
                 if r is None:
                     break
-                e, modo = r
+                e, modo_pvpc = r
                 precios = replace(base_precios, energia_p1=e["p1"], energia_p2=e["p2"], energia_p3=e["p3"])
-                modos.append(modo)
+                modos.append(modo_pvpc)
             desgloses.append(calcular(a_consumo(f), precios, vig, f.fecha_emision))
         if len(desgloses) < len(facturas):
             base["avisos"].append(
@@ -144,6 +159,7 @@ def comparar(
                 "nombre": t.nombre,
                 "tipo": t.tipo,
                 "es_actual": actual is not None and t.id == actual.id,
+                "es_real": False,
                 "precision": precision,
                 "total_periodo": _r(total),
                 "anual_estimado": _r(total * factor_anual),
@@ -158,9 +174,21 @@ def comparar(
     if not resultados:
         return base
 
-    # Referencia del ahorro: tarifa actual simulada; si no hay, lo realmente pagado
+    # Referencia del ahorro: tarifa actual simulada; si no hay (o en modo «pagado»), lo realmente pagado
     ref_actual = next((r for r in resultados if r["es_actual"]), None)
-    if ref_actual:
+    if modo == "pagado" and real_total is not None:
+        total_real = round(real_total, 2)
+        resultados.append({
+            "tarifa_id": 0, "comercializadora": "Tus facturas", "nombre": "Lo que pagaste", "tipo": "real",
+            "es_actual": False, "es_real": True, "precision": None,
+            "total_periodo": total_real, "anual_estimado": _r(total_real * factor_anual),
+            "mensual_medio": _r(total_real * factor_anual / 12),
+            "precio_medio_kwh": _r(total_real / kwh_totales, 4) if kwh_totales else None,
+            "por_factura": [f.importe_total for f in facturas], "desglose_total": None, "avisos": [],
+        })  # fmt: skip
+        resultados.sort(key=lambda r: r["total_periodo"])
+        ref_total, ref_origen = total_real, "importe_real"
+    elif ref_actual:
         ref = ref_actual
         ref_total, ref_origen = ref["total_periodo"], "tarifa_actual"
     elif real_total is not None:
@@ -199,6 +227,25 @@ def comparar(
                 fila["desviacion_pct"] = _r((sim - f.importe_total) / f.importe_total * 100, 1)
         filas.append(fila)
 
+    # El PVPC depende del mercado: si gana, se indica en qué facturas habría salido más caro
+    mejor = resultados[0]
+    ref_por_factura = (
+        [f.importe_total for f in facturas] if ref_origen == "importe_real" and real_total is not None
+        else (ref_actual["por_factura"] if ref_actual else None)
+    )
+    if mejor["tipo"] == "pvpc" and ref_por_factura:
+        peores = [
+            f"{f.fecha_inicio:%m/%Y}" for f, pv, ref in zip(facturas, mejor["por_factura"], ref_por_factura, strict=False)
+            if ref is not None and pv > ref
+        ]  # fmt: skip
+        texto = (
+            "El PVPC sale más barato con los precios de mercado de este periodo, pero cambia cada hora y nadie "
+            "garantiza que el futuro se parezca al pasado."
+        )
+        if peores:
+            texto += f" Habría salido más caro en {len(peores)} de {len(facturas)} facturas: {', '.join(peores)}."
+        base["avisos"].append(texto)
+
     base["facturas"] = filas
     base["tarifas"] = resultados
     base["resumen"] = {
@@ -215,6 +262,7 @@ def comparar(
         },
         "importe_real_total": _r(real_total),
         "referencia": ref_origen,
+        "modo": modo,
         "referencia_total": _r(ref_total),
         "referencia_anual": _r(ref_total * factor_anual) if ref_total is not None else None,
         "mejor": resultados[0]["tarifa_id"],

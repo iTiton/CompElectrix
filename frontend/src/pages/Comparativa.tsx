@@ -32,6 +32,7 @@ export default function ComparativaPage() {
   const [domId, setDomId] = useState(params.get("domicilio") ?? "");
   const [desde, setDesde] = useState("");
   const [hasta, setHasta] = useState("");
+  const [modo, setModo] = useState<"hoy" | "pagado">("hoy");
   const [res, setRes] = useState<Comparativa | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -48,7 +49,7 @@ export default function ComparativaPage() {
     setParams({ domicilio: domId });
     try {
       const r = await api.post<Comparativa>("/comparativa", {
-        domicilio_id: Number(domId), desde: desde || null, hasta: hasta || null,
+        domicilio_id: Number(domId), desde: desde || null, hasta: hasta || null, modo,
       });
       setRes(r);
       setDetalle(r.tarifas[0]?.tarifa_id ?? null);
@@ -68,6 +69,25 @@ export default function ComparativaPage() {
   return (
     <>
       <Cabecera titulo="Comparativa" sub="Simula tus facturas reales con cada tarifa del catálogo, con todos los conceptos e impuestos." />
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="flex rounded-xl bg-zinc-100 p-1 text-sm dark:bg-zinc-800" role="group" aria-label="Tipo de comparación">
+          {([["hoy", "Con los precios de hoy"], ["pagado", "Con lo que pagué"]] as const).map(([v, t]) => (
+            <button
+              key={v}
+              onClick={() => (setModo(v), setRes(null))}
+              aria-pressed={modo === v}
+              className={`rounded-lg px-3 py-1.5 font-medium transition ${modo === v ? "bg-white shadow-sm dark:bg-zinc-950" : "text-zinc-500"}`}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-zinc-500">
+          {modo === "hoy"
+            ? "Cada tarifa con sus precios actuales y el PVPC con sus precios reales: para decidir de cara al futuro."
+            : "Solo las facturas con importe real: lo que pagaste frente a cada tarifa en esas mismas fechas (el PVPC, con sus precios de entonces)."}
+        </p>
+      </div>
       <div className="tarjeta mb-6 grid items-end gap-4 sm:grid-cols-4">
         <Campo etiqueta="Domicilio">
           <select className="entrada" value={domId} onChange={(e) => (setDomId(e.target.value), setRes(null))}>
@@ -91,7 +111,7 @@ function Resultado({ res, detalle, setDetalle }: { res: Comparativa; detalle: nu
   const mejor = res.tarifas[0];
   const actual = res.tarifas.find((t) => t.es_actual);
   const top = useMemo(() => {
-    const lista = res.tarifas.slice(0, 3);
+    const lista = res.tarifas.filter((t) => !t.es_real).slice(0, 3);
     if (actual && !lista.includes(actual)) lista.push(actual);
     return lista;
   }, [res, actual]);
@@ -110,7 +130,7 @@ function Resultado({ res, detalle, setDetalle }: { res: Comparativa; detalle: nu
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi t="Periodo analizado" v={`${r.num_facturas} facturas`} s={`${fecha(r.fecha_inicio)} – ${fecha(r.fecha_fin)} · ${r.dias} días`} />
             <Kpi
-              t={r.referencia === "tarifa_actual" ? "Coste anual con tu tarifa" : "Coste anual real"}
+              t={r.referencia === "tarifa_actual" ? "Coste anual con tu tarifa" : "Lo que pagaste (al año)"}
               v={eur(r.referencia_anual)}
               s={r.cobertura_anual ? "Datos de un año completo" : "Extrapolado a 12 meses"}
             />
@@ -134,7 +154,7 @@ function Resultado({ res, detalle, setDetalle }: { res: Comparativa; detalle: nu
                   <Tooltip formatter={(v: number) => eur(v)} contentStyle={{ borderRadius: 12 }} />
                   <Bar dataKey="anual_estimado" name="€/año" radius={[0, 6, 6, 0]}>
                     {res.tarifas.map((t, i) => (
-                      <Cell key={t.tarifa_id} fill={i === 0 ? COLORES[0] : t.es_actual ? COLORES[1] : GRIS} />
+                      <Cell key={t.tarifa_id} fill={i === 0 ? COLORES[0] : t.es_actual || t.es_real ? COLORES[1] : GRIS} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -167,7 +187,9 @@ function Resultado({ res, detalle, setDetalle }: { res: Comparativa; detalle: nu
           </div>
 
           <Ranking tarifas={res.tarifas} conAhorro={r.referencia !== null} seleccion={detalle} elegir={setDetalle} />
-          {detalle != null && <DetalleConceptos tarifa={res.tarifas.find((t) => t.tarifa_id === detalle)!} actual={actual} />}
+          {detalle != null && res.tarifas.find((t) => t.tarifa_id === detalle)?.desglose_total && (
+            <DetalleConceptos tarifa={res.tarifas.find((t) => t.tarifa_id === detalle)!} actual={actual} />
+          )}
           <Validacion res={res} />
         </>
       )}
@@ -208,6 +230,7 @@ function Ranking({ tarifas, conAhorro, seleccion, elegir }: { tarifas: Resultado
               <td>
                 <span className="font-medium">{t.nombre}</span>
                 {t.es_actual && <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">actual</span>}
+                {t.es_real && <span className="ml-2 rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">real</span>}
                 {t.precision === "horario" && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="Calculado hora a hora con tu consumo real">hora a hora</span>}
                 {t.precision === "estimado" && <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-300" title="Sin consumo horario: se usa el precio medio de cada periodo">estimado</span>}
                 <span className="block text-xs text-zinc-500">{t.comercializadora}</span>
@@ -241,8 +264,8 @@ function DetalleConceptos({ tarifa, actual }: { tarifa: ResultadoTarifa; actual?
         </thead>
         <tbody>
           {CONCEPTOS.map(([k, etiqueta]) => {
-            const a = tarifa.desglose_total[k];
-            const b = actual?.desglose_total[k] ?? 0;
+            const a = tarifa.desglose_total?.[k] ?? 0;
+            const b = actual?.desglose_total?.[k] ?? 0;
             const signo = k === "descuento_energia" ? -1 : 1;
             if (!a && !b) return null;
             const total = k === "total";

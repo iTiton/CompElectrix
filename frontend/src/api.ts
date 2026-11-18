@@ -92,6 +92,7 @@ export interface ResultadoTarifa {
   nombre: string;
   tipo: string;
   es_actual: boolean;
+  es_real?: boolean;
   precision: "horario" | "estimado" | null;
   posicion: number;
   total_periodo: number;
@@ -99,7 +100,7 @@ export interface ResultadoTarifa {
   mensual_medio: number;
   precio_medio_kwh: number | null;
   por_factura: number[];
-  desglose_total: Desglose;
+  desglose_total: Desglose | null;
   ahorro_periodo?: number;
   ahorro_anual?: number;
   ahorro_mensual?: number;
@@ -131,6 +132,7 @@ export interface Comparativa {
     kwh_reparto_pct: { p1: number; p2: number; p3: number };
     importe_real_total: number | null;
     referencia: "tarifa_actual" | "importe_real" | null;
+    modo?: "hoy" | "pagado";
     referencia_total: number | null;
     referencia_anual: number | null;
     mejor: number;

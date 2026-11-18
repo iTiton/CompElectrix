@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -249,12 +249,13 @@ class PeticionComparativa(BaseModel):
     desde: date | None = None
     hasta: date | None = None
     tarifa_ids: list[int] | None = None
+    modo: Literal["hoy", "pagado"] = "hoy"
 
 
 @router.post("/comparativa")
 def comparativa(p: PeticionComparativa, s: SessionDep):
     d = _obtener(s, Domicilio, p.domicilio_id)
-    return servicios.comparar(s, d, p.desde, p.hasta, p.tarifa_ids)
+    return servicios.comparar(s, d, p.desde, p.hasta, p.tarifa_ids, p.modo)
 
 
 # ------------------------------------------------------ Parámetros regulados

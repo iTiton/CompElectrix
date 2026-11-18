@@ -33,6 +33,13 @@ Todo el texto de la interfaz, el código y la documentación va en español.
   (`get-contract-detail`, P1 y P2) y Octopus (`agreements.details.contractualMaxPower`, que en la práctica llega como **lista por periodo**, aunque
   el esquema diga número: fue la causa del error 500 en la 1.03). Datadis, sin probar con una cuenta real en esta parte. Caso real de la persona usuaria: 3,5 kW hasta el 11/02/2026 y
   4,5 kW desde el 12/02/2026.
+- **Facturas de Octopus** (1.05): se traen de `account.bills` (periodo, emisión, total en céntimos y kWh de las líneas).
+  Los kWh por periodo salen del consumo horario; el último día se decide comparando con los kWh facturados (Octopus
+  no siempre lo incluye). Sustituyen a las mensuales «horario» que se solapen; origen «octopus», `numero` = id de
+  Octopus (repetir actualiza, no duplica). **Sin probar con la cuenta real** al fusionar la 1.05.
+- **Comparativa en dos modos** (1.05): «hoy» (tarifa actual con sus precios de hoy; para decidir) y «pagado» (solo
+  facturas con importe real; fila «Lo que pagaste» como referencia; pasado contra pasado). Si gana el PVPC, aviso
+  de que depende del mercado, con las facturas en que habría salido más caro.
 - **Los precios de las tarifas cambian con el tiempo** (Octopus: peajes en enero, margen de P2 de 0,025 a 0,027).
   La comparativa usa los precios actuales de cada tarifa. Pendiente, quizá: un historial de precios por tarifa.
 - **Disco**: base de datos < 1 MB por año de datos horarios. Panel en Ajustes → Almacenamiento, con un botón para compactar.
