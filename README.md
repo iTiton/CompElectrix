@@ -77,8 +77,17 @@ docker image prune -f      # borra las versiones anteriores de la imagen (~240 M
 
 ### Copia de seguridad
 
-Todos tus datos están en la carpeta `data/`. Para hacer una copia basta con copiar esa carpeta
-(mejor con la aplicación parada: `docker compose stop`, copiar y `docker compose start`).
+En **Ajustes → Copia de seguridad → Descargar copia** el navegador descarga un archivo `.zip` con:
+
+- `datos.sqlite`: todos los datos, para restaurar.
+- `tablas/*.csv`: domicilios, facturas, tarifas, consumo horario e impuestos, para abrirlos con Excel o Numbers
+  (separador `;` y decimales con coma).
+- `LEEME.txt`: qué es cada cosa.
+
+Para volver a una copia: **Restaurar copia** y elige el `.zip`. Antes de restaurar se guarda sola una copia de cómo
+estaban los datos (se conservan las tres últimas, descargables desde la misma tarjeta).
+
+También puedes copiar la carpeta `data/` con la aplicación parada.
 
 ### Espacio en disco
 

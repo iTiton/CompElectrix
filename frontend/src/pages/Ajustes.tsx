@@ -1,6 +1,6 @@
-import { HardDrive, Pencil, Plus, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
-import { useState, type FormEvent } from "react";
-import { api, type EstadoPvpc, type Vigencia } from "../api";
+import { Download, HardDrive, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
+import { api, urlApi, type EstadoPvpc, type Vigencia } from "../api";
 import { Aviso, Cabecera, Campo, fecha, Modal, num, useDatos } from "../components/ui";
 
 export default function Ajustes() {
@@ -36,7 +36,10 @@ export default function Ajustes() {
           </p>
         </div>
       </div>
-      <div className="mb-6"><TarjetaAlmacenamiento /></div>
+      <div className="mb-6 grid gap-6 lg:grid-cols-2">
+        <TarjetaCopia />
+        <TarjetaAlmacenamiento />
+      </div>
       <h2 className="mb-1 text-lg font-semibold">Impuestos y cargos regulados</h2>
       <p className="mb-4 text-sm text-zinc-500">Se aplican a todas las tarifas. Cambian por ley, así que se guardan con fechas de vigencia.</p>
       <div className="mb-4">
@@ -248,6 +251,82 @@ function TarjetaAlmacenamiento() {
         ))}
       </dl>
       {msg && <div className="mt-3"><Aviso tipo="ok">{msg}</Aviso></div>}
+    </div>
+  );
+}
+
+
+interface CopiaAuto {
+  nombre: string;
+  bytes: number;
+  fecha: string;
+}
+
+function TarjetaCopia() {
+  const fichero = useRef<HTMLInputElement>(null);
+  const automaticas = useDatos<CopiaAuto[]>("/copia/automaticas");
+  const [msg, setMsg] = useState<{ tipo: "ok" | "error"; t: string } | null>(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  const restaurar = async (f: File) => {
+    if (!confirm(
+      `¿Restaurar «${f.name}»?\n\nTodos los datos actuales se sustituirán por los de la copia. ` +
+      "Antes se guardará automáticamente una copia de cómo están ahora.",
+    )) {
+      if (fichero.current) fichero.current.value = "";
+      return;
+    }
+    setOcupado(true);
+    setMsg(null);
+    try {
+      const r = await fetch(urlApi("/copia/restaurar"), {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: f,
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail ?? `Error ${r.status}`);
+      const c = j.contenido;
+      setMsg({ tipo: "ok", t: `Copia restaurada: ${c.domicilio} domicilios, ${c.factura} facturas y ${c.tarifa} tarifas. Recargando…` });
+      setTimeout(() => location.reload(), 1800);
+    } catch (e) {
+      setMsg({ tipo: "error", t: (e as Error).message });
+    } finally {
+      setOcupado(false);
+      if (fichero.current) fichero.current.value = "";
+    }
+  };
+
+  return (
+    <div className="tarjeta">
+      <h3 className="flex items-center gap-2 font-semibold"><ShieldCheck size={16} className="text-acento-600" /> Copia de seguridad</h3>
+      <p className="mt-1 text-sm text-zinc-500">
+        Descarga un archivo <strong>.zip</strong> con todos tus datos: la copia completa para restaurar y tablas que se
+        abren con Excel o Numbers. Guárdalo donde quieras (iCloud, el NAS…).
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <a className="btn-primario" href={urlApi("/copia")} download><Download size={16} /> Descargar copia</a>
+        <input ref={fichero} type="file" accept=".zip,.sqlite,application/zip" className="hidden" onChange={(e) => e.target.files?.[0] && restaurar(e.target.files[0])} />
+        <button className="btn-secundario" disabled={ocupado} onClick={() => fichero.current?.click()}>
+          <Upload size={16} /> {ocupado ? "Restaurando…" : "Restaurar copia"}
+        </button>
+      </div>
+      {msg && <div className="mt-3"><Aviso tipo={msg.tipo}>{msg.t}</Aviso></div>}
+      {!!automaticas.datos?.length && (
+        <details className="mt-4 text-sm">
+          <summary className="cursor-pointer text-zinc-500">Copias guardadas antes de restaurar ({automaticas.datos.length})</summary>
+          <ul className="mt-2 space-y-1">
+            {automaticas.datos.map((c) => (
+              <li key={c.nombre}>
+                <a className="text-acento-600 hover:underline" href={urlApi(`/copia/automaticas/${c.nombre}`)} download>
+                  {new Date(c.fecha).toLocaleString("es-ES")}
+                </a>
+                <span className="text-zinc-500"> · {tam(c.bytes)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }
