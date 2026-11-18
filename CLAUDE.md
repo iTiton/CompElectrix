@@ -27,8 +27,9 @@ Todo el texto de la interfaz, el código y la documentación va en español.
 ## Estado
 
 - Fase 1 ✅ domicilios, facturas, tarifas, motor 2.0TD, comparativa, tema claro/oscuro.
-- Fase 2 ✅ PVPC de REE (REData, con reintentos ante su antibots), consumo horario desde CSV, Datadis y Octopus
-  (consultas GraphQL validadas contra el esquema real; Datadis y Octopus **sin probar con una cuenta real**).
+- Fase 2 ✅ PVPC de REE (REData, con reintentos ante su antibots), consumo horario desde CSV, Datadis y Octopus.
+  **Octopus probado con la cuenta real de la persona usuaria** (18/11/2026: ~13.500 horas importadas, de mayo de 2025
+  a noviembre de 2026). Datadis sigue **sin probar con una cuenta real**.
 - Pendiente:
   - **Fase 3**: leer facturas en PDF, foto o texto, con IA opcional. Necesita facturas reales de Octopus anonimizadas.
     La API de Octopus también expone las facturas en PDF (`account.bills` → `attachments.temporaryUrl`).
