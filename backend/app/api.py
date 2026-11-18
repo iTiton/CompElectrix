@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import tempfile
@@ -40,6 +41,7 @@ from .models import (
     VigenciaRegulada,
 )
 
+log = logging.getLogger("compelectrix")
 router = APIRouter(prefix="/api")
 SessionDep = Annotated[Session, Depends(get_session)]
 
@@ -434,8 +436,9 @@ def importar_datadis(id_: int, p: PeticionDatadis, s: SessionDep):
         if tramos:
             servicios.guardar_tramos_importados(s, _obtener(s, Domicilio, id_), tramos, "datadis")
             avisos.append(f"Historial de potencia actualizado con {len(tramos)} contrato(s) de la distribuidora.")
-    except ErrorDatadis as e:
-        avisos.append(f"No se pudo leer la potencia contratada: {e}")
+    except Exception as e:  # noqa: BLE001 - la potencia nunca debe impedir importar el consumo
+        log.exception("Error leyendo la potencia de Datadis")
+        avisos.append(f"Consumo importado, pero no se pudo leer la potencia contratada ({type(e).__name__}: {e}). Revísala en el domicilio.")
     return {"horas": n, "avisos": avisos}
 
 
@@ -475,8 +478,9 @@ def importar_octopus(id_: int, p: PeticionOctopus, s: SessionDep):
                 avisos.append(f"Historial de potencia actualizado con {len(tramos)} contrato(s) de Octopus. Revísalo en el domicilio.")
             else:
                 avisos.append("Octopus no ha indicado la potencia contratada: revísala en el domicilio.")
-        except ErrorOctopus as e:
-            avisos.append(f"No se pudo leer la potencia contratada: {e}")
+        except Exception as e:  # noqa: BLE001 - la potencia nunca debe impedir importar el consumo
+            log.exception("Error leyendo la potencia de Octopus")
+            avisos.append(f"Consumo importado, pero no se pudo leer la potencia contratada ({type(e).__name__}: {e}). Revísala en el domicilio.")
     return {"horas": n, "avisos": avisos}
 
 
