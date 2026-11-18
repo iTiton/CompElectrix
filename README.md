@@ -120,6 +120,9 @@ La interfaz construye entonces todas sus direcciones relativas a esa ruta. Sin l
 
 CompElectrix aparecerá en la página de inicio de Wall-O y se abrirá en el puerto **8101**.
 
+**Con Portainer**: crea un stack desde el repositorio con *Compose path* `portainer.yml`. Los pasos completos,
+junto con los de Wall-O, están en [la guía de Portainer de Wall-O](https://github.com/iTiton/Wall-O/blob/main/docs/portainer.md).
+
 ## Configuración
 
 Copia `.env.example` como `.env` si necesitas cambiar el puerto. Las claves opcionales de próximas fases (IA, ESIOS)

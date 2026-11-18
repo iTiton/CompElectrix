@@ -1,0 +1,41 @@
+# CompElectrix para Portainer (Stacks → Add stack → Repository → Compose path: portainer.yml)
+# Detrás del portal Wall-O: sin puerto propio, se duerme sin uso y se entra por el puerto 8101.
+# Requisito: Wall-O instalado y en marcha antes (crea la red «wallo»).
+services:
+  compelectrix:
+    build: .
+    image: compelectrix:latest
+    container_name: compelectrix
+    restart: unless-stopped
+    volumes:
+      # Por defecto, un volumen de Docker llamado «compelectrix-datos».
+      # Para usar una carpeta de la Raspberry, define en Portainer la variable
+      # COMPELECTRIX_DATOS con su ruta completa (por ejemplo /home/pi/compelectrix-datos).
+      - ${COMPELECTRIX_DATOS:-compelectrix-datos}:/data
+    environment:
+      - TZ=Europe/Madrid
+    mem_limit: 256m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options: { max-size: "1m", max-file: "2" }
+    networks:
+      - wallo
+    labels:
+      wallo.activar: "true"
+      wallo.puerto: "8101"
+      wallo.puerto_interno: "8000"
+      wallo.nombre: CompElectrix
+      wallo.descripcion: Tarifas y consumo eléctrico
+      wallo.icono: rayo
+      wallo.salud: /api/salud
+      wallo.dormir_tras: "15"
+      wallo.orden: "10"
+
+volumes:
+  compelectrix-datos:
+    name: compelectrix-datos
+
+networks:
+  wallo:
+    external: true
