@@ -153,26 +153,45 @@ def _a_dia_local(texto: str | None, fin: bool = False):
     return local.date()
 
 
+def _potencias_kw(bruto) -> list[float]:
+    """Normaliza la potencia de un contrato a una lista de kW por periodo.
+
+    Octopus la devuelve como lista (una por periodo: P1, P2…), aunque el esquema dice número; se aceptan
+    los dos formatos, como número o texto, en kW o en vatios.
+    """
+    valores = bruto if isinstance(bruto, (list, tuple)) else [bruto]
+    salida = []
+    for v in valores:
+        if isinstance(v, dict):  # por si algún día viene como {"period": "P1", "value": 4.5}
+            v = v.get("value") or v.get("power")
+        try:
+            kw = float(str(v).replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if kw > 100:  # en vatios
+            kw /= 1000
+        if 0 < kw <= 15:
+            salida.append(round(kw, 3))
+    return salida
+
+
 def interpretar_potencias(datos: dict, propiedad_id: str) -> list[dict]:
-    """Tramos de potencia de los contratos de una propiedad. Octopus da una sola potencia: se usa en P1 y P2."""
+    """Tramos de potencia de los contratos de una propiedad (P1 y P2; si solo hay una, para los dos)."""
     tramos = []
     for p in (datos.get("account") or {}).get("properties") or []:
         if str(p.get("id")) != str(propiedad_id):
             continue
         for sp in p.get("electricitySupplyPoints") or []:
             for a in sp.get("agreements") or []:
-                kw = (a.get("details") or {}).get("contractualMaxPower")
+                bruto = (a.get("details") or {}).get("contractualMaxPower")
                 desde = _a_dia_local(a.get("validFrom"))
-                if kw in (None, "") or desde is None:
+                kws = _potencias_kw(bruto)
+                if not kws or desde is None:
                     continue
-                kw = float(kw)
-                if kw > 100:  # en vatios
-                    kw /= 1000
-                if not 0 < kw <= 15:
-                    continue
+                kw1, kw2 = kws[0], (kws[1] if len(kws) > 1 else kws[0])
                 tramos.append({
                     "desde": desde, "hasta": _a_dia_local(a.get("validTo"), fin=True),
-                    "kw_p1": round(kw, 3), "kw_p2": round(kw, 3), "nota": "Contrato de Octopus",
+                    "kw_p1": kw1, "kw_p2": kw2, "nota": "Contrato de Octopus",
                 })  # fmt: skip
     return sorted(tramos, key=lambda t: t["desde"])
 

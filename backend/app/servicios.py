@@ -51,7 +51,7 @@ def vigencias(s: Session) -> list[Vigencia]:
 
 
 def simular(s: Session, factura: Factura, tarifa: Tarifa) -> Desglose:
-    return calcular(a_consumo(factura), a_precios(tarifa), vigencias(s))
+    return calcular(a_consumo(factura), a_precios(tarifa), vigencias(s), factura.fecha_emision)
 
 
 def _r(x: float | None, n: int = 2) -> float | None:
@@ -120,7 +120,7 @@ def comparar(
                 e, modo = r
                 precios = replace(base_precios, energia_p1=e["p1"], energia_p2=e["p2"], energia_p3=e["p3"])
                 modos.append(modo)
-            desgloses.append(calcular(a_consumo(f), precios, vig))
+            desgloses.append(calcular(a_consumo(f), precios, vig, f.fecha_emision))
         if len(desgloses) < len(facturas):
             base["avisos"].append(
                 f"«{t.nombre}» no se ha incluido: faltan precios del PVPC para algunas fechas. "
@@ -450,3 +450,39 @@ def guardar_tramos_importados(s: Session, dom: Domicilio, tramos: list[dict], or
     sincronizar_potencia_actual(s, dom)
     recalcular_potencia_facturas(s, dom)
     return len(tramos)
+
+
+# ============================================ Importes calculados por factura
+def importes_calculados(s: Session, dom: Domicilio) -> dict:
+    """Importe de cada factura según su tarifa (o la actual del domicilio), para las que no tienen importe real."""
+    facturas = list(s.exec(select(Factura).where(Factura.domicilio_id == dom.id)))
+    if not facturas:
+        return {"importes": {}, "tarifa_actual": None}
+    actual = s.get(Tarifa, dom.tarifa_actual_id) if dom.tarifa_actual_id else None
+    vig = vigencias(s)
+    horarios = None
+    tarifas: dict[int, Tarifa | None] = {}
+    importes = {}
+    for f in facturas:
+        tid = f.tarifa_id or (actual.id if actual else None)
+        if tid is None:
+            continue
+        if tid not in tarifas:
+            tarifas[tid] = s.get(Tarifa, tid)
+        t = tarifas[tid]
+        if t is None:
+            continue
+        precios, precision = a_precios(t), None
+        if t.tipo == "pvpc":
+            if horarios is None:
+                horarios = DatosHorarios(
+                    s, dom.id, min(x.fecha_inicio for x in facturas), max(fin_efectivo(x) for x in facturas)
+                )
+            r = horarios.precios_energia_pvpc(f)
+            if r is None:
+                continue  # faltan precios del PVPC para esas fechas
+            e, precision = r
+            precios = replace(precios, energia_p1=e["p1"], energia_p2=e["p2"], energia_p3=e["p3"])
+        d = calcular(a_consumo(f), precios, vig, f.fecha_emision)
+        importes[f.id] = {"total": round(d.total, 2), "tarifa": t.nombre, "precision": precision}
+    return {"importes": importes, "tarifa_actual": actual.nombre if actual else None}

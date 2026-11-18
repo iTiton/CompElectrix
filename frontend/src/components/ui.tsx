@@ -103,3 +103,17 @@ export function useDatos<T>(ruta: string | null, deps: unknown[] = [], eventos: 
   }, [ruta, n, ...deps]);
   return { datos, error, recargar: () => setN((x) => x + 1) };
 }
+
+/** Versión del servidor (se pide una sola vez). */
+let versionCache: Promise<string | null> | null = null;
+export function useVersion() {
+  const [v, setV] = useState<string | null>(null);
+  useEffect(() => {
+    versionCache ??= fetch(urlApi("/salud"))
+      .then((r) => r.json())
+      .then((j) => j.version ?? null)
+      .catch(() => null);
+    versionCache.then(setV);
+  }, []);
+  return v;
+}

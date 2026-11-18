@@ -48,3 +48,32 @@ def test_credenciales_octopus(monkeypatch):
     monkeypatch.setattr(octopus.urllib.request, "urlopen", lambda req, timeout: _resp(None, err))
     with pytest.raises(octopus.ErrorOctopus, match="incorrectos"):
         octopus.ClienteOctopus("a", "b").suministros()
+
+
+def test_un_fallo_en_la_potencia_no_impide_importar_el_consumo(monkeypatch):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from app import api as modulo
+    from app.main import app
+
+    class Falso:
+        def __init__(self, *_):
+            pass
+
+        def consumos(self, *_):
+            return [(datetime(2026, 1, 1, 0), 0.5, True)]
+
+        def potencias(self, *_):
+            raise ValueError("formato inesperado")
+
+    monkeypatch.setattr(modulo, "ClienteOctopus", Falso)
+    with TestClient(app, raise_server_exceptions=False) as c:
+        i = c.post("/api/domicilios", json={"nombre": "Fallo potencia"}).json()["id"]
+        r = c.post(f"/api/domicilios/{i}/consumo/octopus", json={
+            "credenciales": {"usuario": "a@b.c", "clave": "x"}, "propiedad_id": "1", "cuenta": "A-1",
+            "desde": "2026-01-01", "hasta": "2026-01-01"})  # fmt: skip
+        assert r.status_code == 200, r.text
+        assert r.json()["horas"] == 1 and "formato inesperado" in r.json()["avisos"][0]
+        c.delete(f"/api/domicilios/{i}")

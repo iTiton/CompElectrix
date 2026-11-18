@@ -2,6 +2,7 @@ import { BarChart3, Clock, Home, LayoutGrid, Laptop, Menu, Moon, Settings, Sun, 
 import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import AvisoActualizacion from "./components/AvisoActualizacion";
+import { useVersion } from "./components/ui";
 import Ajustes from "./pages/Ajustes";
 import DomicilioPage from "./pages/Domicilio";
 import Inicio from "./pages/Inicio";
@@ -54,6 +55,7 @@ const NAV = [
 
 export default function App() {
   const [tema, setTema] = useTema();
+  const version = useVersion();
   const [menu, setMenu] = useState(false);
   const loc = useLocation();
   useEffect(() => setMenu(false), [loc.pathname]);
@@ -122,6 +124,7 @@ export default function App() {
               </button>
             ))}
           </div>
+          {version && <p className="px-1 text-center text-xs text-zinc-400 dark:text-zinc-500">CompElectrix {version}</p>}
         </div>
       </aside>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-8">

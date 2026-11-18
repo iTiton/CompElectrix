@@ -22,7 +22,8 @@ def _tarifa(c, nombre, e):
 
 def test_flujo_completo():
     with TestClient(app) as c:
-        assert c.get("/api/salud").json() == {"estado": "ok"}
+        assert c.get("/api/salud").json()["estado"] == "ok"
+        assert c.get("/api/salud").json()["version"].count(".") == 1
         assert len(c.get("/api/vigencias").json()) >= 2
 
         cara = _tarifa(c, "Cara", 0.20)

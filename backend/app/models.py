@@ -65,6 +65,9 @@ class FacturaBase(SQLModel):
         default=None, ge=1, le=400,
         description="Días facturados si la factura cuenta distinto (Octopus: del 21/09 al 20/10 = 29 días)",
     )  # fmt: skip
+    fecha_emision: date | None = Field(
+        default=None, description="Si se indica, IVA e impuesto eléctrico se aplican con los tipos de esta fecha",
+    )
     comercializadora: str | None = None
     tarifa_id: int | None = Field(default=None, foreign_key="tarifa.id")
     numero: str | None = None

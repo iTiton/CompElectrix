@@ -73,3 +73,67 @@ def test_migracion_desde_una_base_de_datos_anterior(tmp_path, monkeypatch):
     db.init_db()
     ruta = db.engine.url.database
     assert "dias" in {r[1] for r in sqlite3.connect(ruta).execute("PRAGMA table_info(factura)")}
+
+
+def test_importe_calculado_en_la_lista_de_facturas():
+    with TestClient(app) as c:
+        t = c.post("/api/tarifas", json=TARIFA).json()["id"]
+        i = c.post("/api/domicilios", json={"nombre": "Importes", "potencia_p1_kw": 4.5, "potencia_p2_kw": 4.5}).json()["id"]
+        f = c.post("/api/facturas", json={"domicilio_id": i, "fecha_inicio": "2026-09-21", "fecha_fin": "2026-10-20", "dias": 29,
+                                          "kwh_p1": 47, "kwh_p2": 50, "kwh_p3": 175, "kw_p1": 4.5, "kw_p2": 4.5}).json()  # fmt: skip
+        # Sin tarifa: no hay importe calculado
+        r = c.get(f"/api/domicilios/{i}/facturas/importes").json()
+        assert r == {"importes": {}, "tarifa_actual": None}
+        # Con tarifa actual en el domicilio: se calcula con ella
+        dom = c.get(f"/api/domicilios/{i}").json()
+        c.put(f"/api/domicilios/{i}", json={**dom, "tarifa_actual_id": t})
+        r = c.get(f"/api/domicilios/{i}/facturas/importes").json()
+        assert r["tarifa_actual"] == TARIFA["nombre"]
+        assert r["importes"][str(f["id"])]["total"] == pytest.approx(67.48, abs=0.01)
+        c.delete(f"/api/domicilios/{i}")
+        c.delete(f"/api/tarifas/{t}")
+
+
+def test_factura_con_la_rebaja_de_impuestos_de_2026():
+    """Última factura «REDUCIDO» de Octopus: 20/04–20/05/2026. IVA 10 % e IEE al mínimo de 1 €/MWh."""
+    with TestClient(app) as c:
+        vig = c.get("/api/vigencias").json()
+        rebaja = [v for v in vig if v["iva_pct"] == 10]
+        assert len(rebaja) == 1 and rebaja[0]["fecha_desde"] == "2026-03-22" and rebaja[0]["fecha_hasta"] == "2026-05-31"
+
+        t = c.post("/api/tarifas", json=TARIFA).json()["id"]
+        i = c.post("/api/domicilios", json={"nombre": "Rebaja"}).json()["id"]
+        f = c.post("/api/facturas", json={"domicilio_id": i, "fecha_inicio": "2026-04-20", "fecha_fin": "2026-05-20", "dias": 30,
+                                          "kwh_p1": 50, "kwh_p2": 50, "kwh_p3": 150, "kw_p1": 4.5, "kw_p2": 4.5}).json()  # fmt: skip
+        d = c.get(f"/api/facturas/{f['id']}/simular/{t}").json()
+        # 0,5 % de la base (~0,23 €) es menos que 250 kWh × 1 €/MWh = 0,25 €: se aplica el mínimo, como en la factura
+        assert d["iee"] == pytest.approx(0.25, abs=0.001)
+        assert d["iva"] == pytest.approx(d["base_iva"] * 0.10, abs=0.01)
+        c.delete(f"/api/domicilios/{i}")
+        c.delete(f"/api/tarifas/{t}")
+
+
+def test_los_impuestos_se_aplican_segun_la_fecha_de_emision():
+    """Factura real 20/05–19/06/2026, emitida el 22/06: empieza dentro de la rebaja (hasta el 31/05) pero
+    Octopus aplica toda ella IEE 5,11 % e IVA 21 %, porque el impuesto se devenga al facturar."""
+    with TestClient(app) as c:
+        t = c.post("/api/tarifas", json=TARIFA).json()["id"]
+        i = c.post("/api/domicilios", json={"nombre": "Devengo"}).json()["id"]
+        base = {"domicilio_id": i, "fecha_inicio": "2026-05-20", "fecha_fin": "2026-06-19", "dias": 30,
+                "kwh_p1": 60, "kwh_p2": 70, "kwh_p3": 200, "kw_p1": 4.5, "kw_p2": 4.5}  # fmt: skip
+        con = c.post("/api/facturas", json={**base, "fecha_emision": "2026-06-22"}).json()
+        sin = c.post("/api/facturas", json=base).json()
+        d = c.get(f"/api/facturas/{con['id']}/simular/{t}").json()
+        assert d["iee"] == pytest.approx(d["base_iee"] * 0.0511269632, abs=0.001)
+        assert d["iva"] == pytest.approx(d["base_iva"] * 0.21, abs=0.01)
+        assert d["bono_social"] == pytest.approx(0.019 * 30, abs=0.01)  # el bono sigue por días: 0,57 € como en la factura
+        # Sin fecha de emisión se prorratea: 12 días rebajados, sale más barata
+        d2 = c.get(f"/api/facturas/{sin['id']}/simular/{t}").json()
+        assert d2["total"] < d["total"] - 2
+
+        # Y la última reducida (20/04–20/05, emitida el 22/05) va entera con la rebaja
+        r = c.post("/api/facturas", json={**base, "fecha_inicio": "2026-04-20", "fecha_fin": "2026-05-20", "fecha_emision": "2026-05-22"}).json()
+        d3 = c.get(f"/api/facturas/{r['id']}/simular/{t}").json()
+        assert d3["iva"] == pytest.approx(d3["base_iva"] * 0.10, abs=0.01)
+        c.delete(f"/api/domicilios/{i}")
+        c.delete(f"/api/tarifas/{t}")

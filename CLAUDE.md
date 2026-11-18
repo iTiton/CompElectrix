@@ -19,7 +19,9 @@ Todo el texto de la interfaz, el código y la documentación va en español.
 - **Credenciales (Datadis, Octopus)**: **nunca se guardan**. Se piden en cada importación con un formulario
   `autocomplete=username/current-password` para que las rellene el gestor de contraseñas (usa 1Password).
 - **Parámetros regulados** (IEE, IVA, alquiler de contador, bono social) con fechas de vigencia, prorrateados por días.
-  La rebaja temporal de marzo–mayo de 2026 no está cargada (fechas sin confirmar).
+  La rebaja temporal del RDL 7/2026 (IVA 10 %, IEE 0,5 % con mínimo de 1 €/MWh) va del 22/03/2026 (AEAT) al
+  31/05/2026 (comprobado con facturas de Octopus). Matiz: Octopus aplica el tipo según la fecha de la factura, no por días,
+  así que una factura que cruce el 31/05 puede diferir un poco del cálculo prorrateado.
 - **Subruta**: la app funciona tras un proxy con `X-Forwarded-Prefix` (inyecta `<base href>`), aunque se ha optado por
   un **puerto por servicio**.
 - **Cálculo validado con facturas reales de Octopus** (`backend/tests/test_factura_real.py`, 67,48 €): la base del IEE
@@ -28,8 +30,8 @@ Todo el texto de la interfaz, el código y la documentación va en español.
 - **Historial de potencias** por domicilio (tabla `potenciacontratada`). Las facturas con origen «horario» usan la
   media ponderada por días de la potencia vigente (es exacta, porque la potencia se paga por kW·día) y se recalculan
   al editar el historial. Las facturas manuales conservan su potencia. Se rellena al importar: Datadis
-  (`get-contract-detail`, P1 y P2) y Octopus (`agreements.details.contractualMaxPower`, un solo valor). Los dos están
-  **sin probar con una cuenta real** en esta parte. Caso real de la persona usuaria: 3,5 kW hasta el 11/02/2026 y
+  (`get-contract-detail`, P1 y P2) y Octopus (`agreements.details.contractualMaxPower`, que en la práctica llega como **lista por periodo**, aunque
+  el esquema diga número: fue la causa del error 500 en la 1.03). Datadis, sin probar con una cuenta real en esta parte. Caso real de la persona usuaria: 3,5 kW hasta el 11/02/2026 y
   4,5 kW desde el 12/02/2026.
 - **Los precios de las tarifas cambian con el tiempo** (Octopus: peajes en enero, margen de P2 de 0,025 a 0,027).
   La comparativa usa los precios actuales de cada tarifa. Pendiente, quizá: un historial de precios por tarifa.
@@ -57,6 +59,8 @@ Todo el texto de la interfaz, el código y la documentación va en español.
 - La siguiente versión (1.01, 1.02…) se trabaja en una rama aparte. Cuando está madura, se crea una pull request
   hacia `main` y la fusiona Claude cuando la persona usuaria lo pide. Después, la siguiente versión empieza en otra rama.
 - No subir nada directamente a `main`.
+- **Número de versión**: `backend/app/version.py`. Se pone el de la versión en curso al empezarla (p. ej. 1.04) y se
+  comprueba antes de fusionar. Se ve en el menú lateral, en Ajustes y en la portada de Wall-O (vía `/api/salud`).
 
 ## Comprobaciones antes de entregar
 

@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import router
 from .db import init_db
 
-__version__ = "0.2.0"
+from .version import VERSION as __version__  # noqa: E402
 
 FRONTEND_DIR = Path(
     os.environ.get("COMPELECTRIX_FRONTEND", Path(__file__).resolve().parents[2] / "frontend" / "dist")
