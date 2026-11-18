@@ -17,10 +17,12 @@ COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && useradd -u 1000 -m compelectrix && mkdir /data && chown compelectrix /data
 COPY backend/app ./app
 COPY backend/scripts ./scripts
+COPY backend/entrada.sh /entrada.sh
 COPY --from=interfaz /src/dist ./frontend
-USER compelectrix
 EXPOSE 8000
 HEALTHCHECK --interval=60s --timeout=5s --start-period=20s \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/salud')" || exit 1
+# Arranca como root solo para arreglar los permisos de /data; la aplicación corre como «compelectrix»
+ENTRYPOINT ["/entrada.sh"]
 # Un solo proceso: suficiente para uso personal y lo más ligero para la Raspberry
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--no-access-log"]

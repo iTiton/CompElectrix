@@ -61,7 +61,7 @@ La primera vez tarda unos minutos porque tiene que prepararlo todo. Después arr
 ### ¿Quieres probarla con datos inventados?
 
 ```bash
-docker exec compelectrix python -m scripts.demo
+docker exec -u compelectrix compelectrix python -m scripts.demo
 ```
 
 Solo se carga si la aplicación está vacía. Después puedes borrar los domicilios de ejemplo desde la propia aplicación.
