@@ -13,10 +13,16 @@ from .motor.calculo import DIAS_ANIO, Consumo, Desglose, PreciosTarifa, Vigencia
 from .motor.periodos import a_local, horas_esperadas, limites_utc, periodo_local, periodo_utc
 
 
+def fin_efectivo(f: Factura) -> date:
+    """Último día que cubre la factura. Si indica sus días (p. ej. Octopus cuenta del 21 al 20 como 29),
+    el periodo termina el día anterior a la fecha de fin; si no, la fecha de fin está incluida."""
+    return f.fecha_inicio + timedelta(days=f.dias - 1) if f.dias else f.fecha_fin
+
+
 def a_consumo(f: Factura) -> Consumo:
     return Consumo(
         fecha_inicio=f.fecha_inicio,
-        fecha_fin=f.fecha_fin,
+        fecha_fin=fin_efectivo(f),
         kwh_p1=f.kwh_p1,
         kwh_p2=f.kwh_p2,
         kwh_p3=f.kwh_p3,
@@ -354,7 +360,7 @@ class DatosHorarios:
           de cada periodo en esas fechas (supone consumo repartido por igual).
         None si faltan precios.
         """
-        ini, fin = limites_utc(f.fecha_inicio, f.fecha_fin)
+        ini, fin = limites_utc(f.fecha_inicio, fin_efectivo(f))
         horas = [ini + timedelta(hours=i) for i in range(int((fin - ini).total_seconds() // 3600))]
         if not horas or any(h not in self.precios for h in horas):
             return None

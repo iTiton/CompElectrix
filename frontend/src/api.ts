@@ -40,6 +40,7 @@ export interface Factura {
   domicilio_id: number;
   fecha_inicio: string;
   fecha_fin: string;
+  dias: number | null;
   comercializadora: string | null;
   tarifa_id: number | null;
   numero: string | null;

@@ -56,9 +56,26 @@ INDICES_OBSOLETOS = (  # redundantes con las restricciones únicas (versión 0.2
 )
 
 
+def _columnas(s: Session, tabla: str) -> set[str]:
+    return {r[1] for r in s.exec(text(f"PRAGMA table_info({tabla})"))}  # type: ignore[call-overload]
+
+
+def _migrar(s: Session) -> None:
+    """Cambios de estructura entre versiones (SQLite no añade columnas solo)."""
+    if "dias" not in _columnas(s, "factura"):  # 1.03
+        s.exec(text("ALTER TABLE factura ADD COLUMN dias INTEGER"))  # type: ignore[call-overload]
+    # 1.03: comprobado con una factura real de Octopus que la base del impuesto eléctrico
+    # es potencia + energía, sin el bono social. Se corrige una sola vez.
+    if not s.get(Ajuste, "migracion_iee_sin_bono"):
+        s.exec(text("UPDATE vigenciaregulada SET iee_incluye_bono_social = 0"))  # type: ignore[call-overload]
+        s.add(Ajuste(clave="migracion_iee_sin_bono", valor="hecha"))
+    s.commit()
+
+
 def init_db() -> None:
     SQLModel.metadata.create_all(engine)
     with Session(engine) as s:
+        _migrar(s)
         for i in INDICES_OBSOLETOS:
             s.exec(text(f"DROP INDEX IF EXISTS {i}"))  # type: ignore[call-overload]
         if not s.exec(select(VigenciaRegulada)).first():

@@ -98,7 +98,7 @@ function FormVigencia({ inicial, cerrar, hecho }: { inicial?: Vigencia; cerrar: 
     iva_pct: String(inicial?.iva_pct ?? 21),
     alquiler_contador_eur_dia: String(inicial?.alquiler_contador_eur_dia ?? 0.02663),
     bono_social_eur_anio: String(inicial?.bono_social_eur_anio ?? 0),
-    iee_incluye_bono_social: inicial?.iee_incluye_bono_social ?? true,
+    iee_incluye_bono_social: inicial?.iee_incluye_bono_social ?? false,
     nota: inicial?.nota ?? "",
   });
   const [error, setError] = useState<string | null>(null);

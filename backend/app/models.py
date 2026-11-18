@@ -61,6 +61,10 @@ class FacturaBase(SQLModel):
     domicilio_id: int = Field(foreign_key="domicilio.id", index=True)
     fecha_inicio: date
     fecha_fin: date
+    dias: int | None = Field(
+        default=None, ge=1, le=400,
+        description="Días facturados si la factura cuenta distinto (Octopus: del 21/09 al 20/10 = 29 días)",
+    )  # fmt: skip
     comercializadora: str | None = None
     tarifa_id: int | None = Field(default=None, foreign_key="tarifa.id")
     numero: str | None = None
@@ -91,7 +95,7 @@ class VigenciaBase(SQLModel):
     iva_pct: float = 21.0
     alquiler_contador_eur_dia: float = round(0.81 * 12 / 365, 6)
     bono_social_eur_anio: float = 0.0
-    iee_incluye_bono_social: bool = True
+    iee_incluye_bono_social: bool = False
     nota: str | None = None
 
 

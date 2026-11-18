@@ -97,7 +97,7 @@ export default function DomicilioPage() {
             </thead>
             <tbody>
               {lista.map((f) => {
-                const dias = Math.round((+new Date(f.fecha_fin) - +new Date(f.fecha_inicio)) / 864e5) + 1;
+                const dias = f.dias ?? Math.round((+new Date(f.fecha_fin) - +new Date(f.fecha_inicio)) / 864e5) + 1;
                 return (
                   <tr key={f.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
                     <td>{fecha(f.fecha_inicio)} – {fecha(f.fecha_fin)}<span className="block text-xs text-zinc-500">{f.origen === "horario" ? "Desde consumo horario" : f.comercializadora}</span></td>
