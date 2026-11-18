@@ -116,3 +116,17 @@ def test_almacenamiento_y_compactar():
         assert a["bytes_total"] > 0 and "precios_horarios" in a["filas"]
         r = c.post("/api/almacenamiento/compactar").json()
         assert r["despues"] > 0
+
+
+def test_puerto_portal():
+    from starlette.requests import Request
+
+    from app.main import puerto_portal
+
+    def req(valor):
+        return Request({"type": "http", "headers": [(b"x-wallo-portal", valor.encode())]})
+
+    assert puerto_portal(req("8100")) == 8100
+    assert puerto_portal(req("")) is None
+    assert puerto_portal(req('8100"><script>')) is None
+    assert puerto_portal(req("99999")) is None

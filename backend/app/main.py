@@ -42,7 +42,10 @@ if FRONTEND_DIR.is_dir():
         fichero = (FRONTEND_DIR / ruta).resolve()
         if ruta and fichero.is_file() and FRONTEND_DIR.resolve() in fichero.parents:
             return FileResponse(fichero)
-        return HTMLResponse(INDEX.replace('<base href="/" />', f'<base href="{prefijo(request)}/" />', 1))
+        cabecera = f'<base href="{prefijo(request)}/" />'
+        if puerto := puerto_portal(request):
+            cabecera += f'\n    <meta name="wallo-portal" content="{puerto}" />'
+        return HTMLResponse(INDEX.replace('<base href="/" />', cabecera, 1))
 
 
 PREFIJO_VALIDO = re.compile(r"^(/[A-Za-z0-9._~-]+)+$")
@@ -56,3 +59,9 @@ def prefijo(request: Request) -> str:
     """
     p = request.headers.get("x-forwarded-prefix", "").rstrip("/")
     return p if PREFIJO_VALIDO.match(p) else ""
+
+
+def puerto_portal(request: Request) -> int | None:
+    """Puerto de la portada de Wall-O si la petición llega a través del portal (cabecera X-Wallo-Portal)."""
+    valor = request.headers.get("x-wallo-portal", "")
+    return int(valor) if valor.isdigit() and 0 < int(valor) < 65536 else None
