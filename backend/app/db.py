@@ -70,8 +70,11 @@ def _columnas(s: Session, tabla: str) -> set[str]:
 
 def _migrar(s: Session) -> None:
     """Cambios de estructura entre versiones (SQLite no añade columnas solo)."""
-    if "dias" not in _columnas(s, "factura"):  # 1.03
+    columnas = _columnas(s, "factura")
+    if "dias" not in columnas:  # 1.03
         s.exec(text("ALTER TABLE factura ADD COLUMN dias INTEGER"))  # type: ignore[call-overload]
+    if "fecha_emision" not in columnas:  # 1.04
+        s.exec(text("ALTER TABLE factura ADD COLUMN fecha_emision DATE"))  # type: ignore[call-overload]
     # 1.03: comprobado con una factura real de Octopus que la base del impuesto eléctrico
     # es potencia + energía, sin el bono social. Se corrige una sola vez.
     if not s.get(Ajuste, "migracion_iee_sin_bono"):

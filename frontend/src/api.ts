@@ -41,6 +41,7 @@ export interface Factura {
   fecha_inicio: string;
   fecha_fin: string;
   dias: number | null;
+  fecha_emision: string | null;
   comercializadora: string | null;
   tarifa_id: number | null;
   numero: string | null;

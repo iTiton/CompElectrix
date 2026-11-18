@@ -134,7 +134,23 @@ def repartir_dias(
     return [(ordenadas[i], n) for i, n in sorted(conteo.items())], sin_vigencia
 
 
-def calcular(consumo: Consumo, tarifa: PreciosTarifa, vigencias: list[Vigencia]) -> Desglose:
+def vigencia_en(vigencias: list[Vigencia], dia: date) -> Vigencia:
+    """Vigencia aplicable un día (la que empezó más tarde si se solapan; la más cercana si no hay)."""
+    ordenadas = sorted(vigencias, key=lambda v: v.fecha_desde, reverse=True)
+    return next((v for v in ordenadas if v.cubre(dia)), None) or next(
+        (v for v in ordenadas if v.fecha_desde <= dia), ordenadas[-1]
+    )
+
+
+def calcular(
+    consumo: Consumo, tarifa: PreciosTarifa, vigencias: list[Vigencia], fecha_devengo: date | None = None
+) -> Desglose:
+    """Calcula una factura.
+
+    `fecha_devengo` (la fecha de emisión de la factura): si se indica, el impuesto eléctrico y el IVA se aplican a
+    toda la factura con los tipos de ese día, que es como lo hacen las comercializadoras (el impuesto se devenga al
+    facturar). El bono social y el alquiler siguen contando por días. Sin ella, todo se prorratea por días.
+    """
     dias = consumo.dias
     if dias <= 0:
         raise ValueError("La fecha de fin debe ser igual o posterior a la de inicio")
@@ -164,20 +180,27 @@ def calcular(consumo: Consumo, tarifa: PreciosTarifa, vigencias: list[Vigencia])
             f"{dias_sin} día(s) sin parámetros regulados configurados; se han usado los más cercanos"
         )
 
+    devengo = vigencia_en(vigencias, fecha_devengo) if fecha_devengo else None
     for vig, n in tramos:
         f = n / dias
+        imp = devengo or vig  # tipos de los impuestos: los de la fecha de la factura o los de cada día
         bono = 0.0 if tarifa.incluye_bono_social else vig.bono_social_eur_anio / DIAS_ANIO * n
-        base_iee = base_suministro * f + (bono if vig.iee_incluye_bono_social else 0.0)
-        iee = max(base_iee * vig.iee_pct / 100, consumo.kwh_total * f / 1000 * vig.iee_minimo_eur_mwh)
+        base_iee = base_suministro * f + (bono if imp.iee_incluye_bono_social else 0.0)
         alquiler = vig.alquiler_contador_eur_dia * n
-        cuota = d.cuota_fija * f
-        base_iva = base_suministro * f + bono + iee + alquiler + cuota
         d.bono_social += bono
         d.base_iee += base_iee
-        d.iee += iee
         d.alquiler_contador += alquiler
-        d.base_iva += base_iva
-        d.iva += base_iva * vig.iva_pct / 100
+        if devengo is None:
+            iee = max(base_iee * vig.iee_pct / 100, consumo.kwh_total * f / 1000 * vig.iee_minimo_eur_mwh)
+            base_iva = base_suministro * f + bono + iee + alquiler + d.cuota_fija * f
+            d.iee += iee
+            d.base_iva += base_iva
+            d.iva += base_iva * vig.iva_pct / 100
+
+    if devengo is not None:
+        d.iee = max(d.base_iee * devengo.iee_pct / 100, consumo.kwh_total / 1000 * devengo.iee_minimo_eur_mwh)
+        d.base_iva = base_suministro + d.bono_social + d.iee + d.alquiler_contador + d.cuota_fija
+        d.iva = d.base_iva * devengo.iva_pct / 100
 
     d.total = d.base_iva + d.iva
     return d

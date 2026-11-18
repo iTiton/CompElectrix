@@ -51,7 +51,7 @@ def vigencias(s: Session) -> list[Vigencia]:
 
 
 def simular(s: Session, factura: Factura, tarifa: Tarifa) -> Desglose:
-    return calcular(a_consumo(factura), a_precios(tarifa), vigencias(s))
+    return calcular(a_consumo(factura), a_precios(tarifa), vigencias(s), factura.fecha_emision)
 
 
 def _r(x: float | None, n: int = 2) -> float | None:
@@ -120,7 +120,7 @@ def comparar(
                 e, modo = r
                 precios = replace(base_precios, energia_p1=e["p1"], energia_p2=e["p2"], energia_p3=e["p3"])
                 modos.append(modo)
-            desgloses.append(calcular(a_consumo(f), precios, vig))
+            desgloses.append(calcular(a_consumo(f), precios, vig, f.fecha_emision))
         if len(desgloses) < len(facturas):
             base["avisos"].append(
                 f"«{t.nombre}» no se ha incluido: faltan precios del PVPC para algunas fechas. "
@@ -483,6 +483,6 @@ def importes_calculados(s: Session, dom: Domicilio) -> dict:
                 continue  # faltan precios del PVPC para esas fechas
             e, precision = r
             precios = replace(precios, energia_p1=e["p1"], energia_p2=e["p2"], energia_p3=e["p3"])
-        d = calcular(a_consumo(f), precios, vig)
+        d = calcular(a_consumo(f), precios, vig, f.fecha_emision)
         importes[f.id] = {"total": round(d.total, 2), "tarifa": t.nombre, "precision": precision}
     return {"importes": importes, "tarifa_actual": actual.nombre if actual else None}

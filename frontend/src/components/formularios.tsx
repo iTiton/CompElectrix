@@ -127,6 +127,7 @@ export function FormFactura({ domicilio, inicial, tarifas, hecho, cancelar }: {
     fecha_inicio: inicial?.fecha_inicio ?? "",
     fecha_fin: inicial?.fecha_fin ?? "",
     dias: inicial?.dias ?? "",
+    fecha_emision: inicial?.fecha_emision ?? "",
     comercializadora: inicial?.comercializadora ?? "",
     tarifa_id: inicial?.tarifa_id ?? domicilio.tarifa_actual_id ?? "",
     numero: inicial?.numero ?? "",
@@ -147,6 +148,7 @@ export function FormFactura({ domicilio, inicial, tarifas, hecho, cancelar }: {
       fecha_inicio: v.fecha_inicio,
       fecha_fin: v.fecha_fin,
       dias: aNum(v.dias, null),
+      fecha_emision: aTexto(v.fecha_emision),
       comercializadora: aTexto(v.comercializadora),
       tarifa_id: aNum(v.tarifa_id, null),
       numero: aTexto(v.numero),
@@ -178,6 +180,9 @@ export function FormFactura({ domicilio, inicial, tarifas, hecho, cancelar }: {
         <Campo etiqueta="Hasta *"><input className="entrada" type="date" required {...campo("fecha_fin")} /></Campo>
         <Campo etiqueta="Días facturados" ayuda={`Opcional: los que indique la factura. Vacío = ${diasCalculados ?? "del primer al último día, ambos incluidos"}`}>
           <input className="entrada num" type="number" min="1" max="400" step="1" {...campo("dias")} placeholder={diasCalculados ? String(diasCalculados) : ""} />
+        </Campo>
+        <Campo etiqueta="Fecha de emisión" ayuda="Opcional: con ella el IVA y el impuesto eléctrico usan los tipos de ese día, como en la factura">
+          <input className="entrada" type="date" {...campo("fecha_emision")} />
         </Campo>
         <Campo etiqueta="Nº factura"><input className="entrada" {...campo("numero")} /></Campo>
         <Campo etiqueta="Comercializadora"><input className="entrada" {...campo("comercializadora")} /></Campo>

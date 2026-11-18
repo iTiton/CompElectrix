@@ -111,3 +111,29 @@ def test_factura_con_la_rebaja_de_impuestos_de_2026():
         assert d["iva"] == pytest.approx(d["base_iva"] * 0.10, abs=0.01)
         c.delete(f"/api/domicilios/{i}")
         c.delete(f"/api/tarifas/{t}")
+
+
+def test_los_impuestos_se_aplican_segun_la_fecha_de_emision():
+    """Factura real 20/05–19/06/2026, emitida el 22/06: empieza dentro de la rebaja (hasta el 31/05) pero
+    Octopus aplica toda ella IEE 5,11 % e IVA 21 %, porque el impuesto se devenga al facturar."""
+    with TestClient(app) as c:
+        t = c.post("/api/tarifas", json=TARIFA).json()["id"]
+        i = c.post("/api/domicilios", json={"nombre": "Devengo"}).json()["id"]
+        base = {"domicilio_id": i, "fecha_inicio": "2026-05-20", "fecha_fin": "2026-06-19", "dias": 30,
+                "kwh_p1": 60, "kwh_p2": 70, "kwh_p3": 200, "kw_p1": 4.5, "kw_p2": 4.5}  # fmt: skip
+        con = c.post("/api/facturas", json={**base, "fecha_emision": "2026-06-22"}).json()
+        sin = c.post("/api/facturas", json=base).json()
+        d = c.get(f"/api/facturas/{con['id']}/simular/{t}").json()
+        assert d["iee"] == pytest.approx(d["base_iee"] * 0.0511269632, abs=0.001)
+        assert d["iva"] == pytest.approx(d["base_iva"] * 0.21, abs=0.01)
+        assert d["bono_social"] == pytest.approx(0.019 * 30, abs=0.01)  # el bono sigue por días: 0,57 € como en la factura
+        # Sin fecha de emisión se prorratea: 12 días rebajados, sale más barata
+        d2 = c.get(f"/api/facturas/{sin['id']}/simular/{t}").json()
+        assert d2["total"] < d["total"] - 2
+
+        # Y la última reducida (20/04–20/05, emitida el 22/05) va entera con la rebaja
+        r = c.post("/api/facturas", json={**base, "fecha_inicio": "2026-04-20", "fecha_fin": "2026-05-20", "fecha_emision": "2026-05-22"}).json()
+        d3 = c.get(f"/api/facturas/{r['id']}/simular/{t}").json()
+        assert d3["iva"] == pytest.approx(d3["base_iva"] * 0.10, abs=0.01)
+        c.delete(f"/api/domicilios/{i}")
+        c.delete(f"/api/tarifas/{t}")
