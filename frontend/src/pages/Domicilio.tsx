@@ -1,4 +1,4 @@
-import { ArrowLeft, BarChart3, FilePlus2, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
+import { ArrowLeft, BarChart3, CloudDownload, FilePlus2, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type Domicilio, type Factura, type ResumenConsumo, type Tarifa } from "../api";
@@ -7,6 +7,7 @@ import { Aviso, Cabecera, eur, fecha, Modal, num, useDatos, Vacio } from "../com
 
 const ConsumoHorario = lazy(() => import("../components/ConsumoHorario"));
 const HistorialPotencia = lazy(() => import("../components/HistorialPotencia"));
+const FacturasOctopus = lazy(() => import("../components/FacturasOctopus"));
 
 export default function DomicilioPage() {
   const { id } = useParams();
@@ -22,6 +23,7 @@ export default function DomicilioPage() {
   const { datos: tarifas } = useDatos<Tarifa[]>("/tarifas");
   const [editando, setEditando] = useState(false);
   const [factura, setFactura] = useState<Factura | "nueva" | null>(null);
+  const [octopus, setOctopus] = useState(false);
 
   if (dom.error) return <Aviso tipo="error">{dom.error}</Aviso>;
   const d = dom.datos;
@@ -66,6 +68,7 @@ export default function DomicilioPage() {
       <Cabecera titulo={d.nombre} sub={[d.direccion, d.cups].filter(Boolean).join(" · ") || undefined}>
         <button className="btn-secundario" onClick={() => setEditando(true)}><Pencil size={16} /> Editar</button>
         <Link className="btn-secundario" to={`/comparativa?domicilio=${d.id}`}><BarChart3 size={16} /> Comparar</Link>
+        <button className="btn-secundario" onClick={() => setOctopus(true)}><CloudDownload size={16} /> Facturas de Octopus</button>
         <button className="btn-primario" onClick={() => setFactura("nueva")}><Plus size={16} /> Añadir factura</button>
       </Cabecera>
 
@@ -119,7 +122,7 @@ export default function DomicilioPage() {
                 const dias = f.dias ?? Math.round((+new Date(f.fecha_fin) - +new Date(f.fecha_inicio)) / 864e5) + 1;
                 return (
                   <tr key={f.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                    <td>{fecha(f.fecha_inicio)} – {fecha(f.fecha_fin)}<span className="block text-xs text-zinc-500">{f.origen === "horario" ? "Desde consumo horario" : f.comercializadora}</span></td>
+                    <td>{fecha(f.fecha_inicio)} – {fecha(f.fecha_fin)}<span className="block text-xs text-zinc-500">{f.origen === "horario" ? "Mes natural, desde el consumo" : f.origen === "octopus" ? "Factura de Octopus" : f.comercializadora}</span></td>
                     <td className="num">{dias}</td>
                     <td className="num">{num(f.kwh_p1)}</td>
                     <td className="num">{num(f.kwh_p2)}</td>
@@ -127,7 +130,17 @@ export default function DomicilioPage() {
                     <td className="num font-medium">{num(f.kwh_p1 + f.kwh_p2 + f.kwh_p3)}</td>
                     <td className="num font-medium">
                       {f.importe_total != null ? (
-                        eur(f.importe_total)
+                        <>
+                          {eur(f.importe_total)}
+                          {calc.datos?.importes[f.id] && (
+                            <span
+                              className={`block text-xs font-normal ${Math.abs(calc.datos.importes[f.id].total / f.importe_total - 1) > 0.03 ? "text-amber-600" : "text-zinc-500"}`}
+                              title={`Calculado con «${calc.datos.importes[f.id].tarifa}»`}
+                            >
+                              calc. {eur(calc.datos.importes[f.id].total)} ({num((calc.datos.importes[f.id].total / f.importe_total - 1) * 100, 1)} %)
+                            </span>
+                          )}
+                        </>
                       ) : calc.datos?.importes[f.id] ? (
                         <span
                           className="font-normal italic text-zinc-500"
@@ -160,6 +173,13 @@ export default function DomicilioPage() {
         <button className="btn-peligro" onClick={borrarDomicilio}><Trash2 size={16} /> Borrar domicilio</button>
       </div>
 
+      <Modal titulo="Traer facturas de Octopus" abierto={octopus} cerrar={() => setOctopus(false)}>
+        {octopus && (
+          <Suspense fallback={null}>
+            <FacturasOctopus domicilio={d} cerrar={() => setOctopus(false)} hecho={() => facs.recargar()} />
+          </Suspense>
+        )}
+      </Modal>
       <Modal titulo="Editar domicilio" abierto={editando} cerrar={() => setEditando(false)}>
         <FormDomicilio inicial={d} tarifas={tarifas ?? []} cancelar={() => setEditando(false)} hecho={() => (setEditando(false), dom.recargar())} />
       </Modal>

@@ -64,13 +64,28 @@ def comparar(
     desde: date | None = None,
     hasta: date | None = None,
     tarifa_ids: list[int] | None = None,
+    modo: str = "hoy",
 ) -> dict:
+    """Compara las tarifas sobre las facturas del domicilio.
+
+    modo «hoy»: referencia = la tarifa actual con sus precios de hoy (para decidir de cara al futuro).
+    modo «pagado»: solo facturas con importe real; referencia = lo que se pagó de verdad, frente a cada tarifa
+    (el PVPC, con sus precios reales de esas fechas): pasado contra pasado.
+    """
     q = select(Factura).where(Factura.domicilio_id == domicilio.id)
     if desde:
         q = q.where(Factura.fecha_fin >= desde)
     if hasta:
         q = q.where(Factura.fecha_inicio <= hasta)
     facturas = list(s.exec(q.order_by(Factura.fecha_inicio)))
+    if modo == "pagado":
+        facturas = [f for f in facturas if f.importe_total is not None]
+        if not facturas:
+            return {
+                "domicilio": {"id": domicilio.id, "nombre": domicilio.nombre}, "facturas": [], "tarifas": [],
+                "resumen": None,
+                "avisos": ["No hay facturas con importe real en ese periodo. Tráelas de Octopus o anota lo que pagaste en cada factura."],
+            }  # fmt: skip
 
     qt = select(Tarifa)
     if tarifa_ids:
@@ -117,9 +132,9 @@ def comparar(
                 r = horarios.precios_energia_pvpc(f)
                 if r is None:
                     break
-                e, modo = r
+                e, modo_pvpc = r
                 precios = replace(base_precios, energia_p1=e["p1"], energia_p2=e["p2"], energia_p3=e["p3"])
-                modos.append(modo)
+                modos.append(modo_pvpc)
             desgloses.append(calcular(a_consumo(f), precios, vig, f.fecha_emision))
         if len(desgloses) < len(facturas):
             base["avisos"].append(
@@ -144,6 +159,7 @@ def comparar(
                 "nombre": t.nombre,
                 "tipo": t.tipo,
                 "es_actual": actual is not None and t.id == actual.id,
+                "es_real": False,
                 "precision": precision,
                 "total_periodo": _r(total),
                 "anual_estimado": _r(total * factor_anual),
@@ -158,9 +174,21 @@ def comparar(
     if not resultados:
         return base
 
-    # Referencia del ahorro: tarifa actual simulada; si no hay, lo realmente pagado
+    # Referencia del ahorro: tarifa actual simulada; si no hay (o en modo «pagado»), lo realmente pagado
     ref_actual = next((r for r in resultados if r["es_actual"]), None)
-    if ref_actual:
+    if modo == "pagado" and real_total is not None:
+        total_real = round(real_total, 2)
+        resultados.append({
+            "tarifa_id": 0, "comercializadora": "Tus facturas", "nombre": "Lo que pagaste", "tipo": "real",
+            "es_actual": False, "es_real": True, "precision": None,
+            "total_periodo": total_real, "anual_estimado": _r(total_real * factor_anual),
+            "mensual_medio": _r(total_real * factor_anual / 12),
+            "precio_medio_kwh": _r(total_real / kwh_totales, 4) if kwh_totales else None,
+            "por_factura": [f.importe_total for f in facturas], "desglose_total": None, "avisos": [],
+        })  # fmt: skip
+        resultados.sort(key=lambda r: r["total_periodo"])
+        ref_total, ref_origen = total_real, "importe_real"
+    elif ref_actual:
         ref = ref_actual
         ref_total, ref_origen = ref["total_periodo"], "tarifa_actual"
     elif real_total is not None:
@@ -199,6 +227,25 @@ def comparar(
                 fila["desviacion_pct"] = _r((sim - f.importe_total) / f.importe_total * 100, 1)
         filas.append(fila)
 
+    # El PVPC depende del mercado: si gana, se indica en qué facturas habría salido más caro
+    mejor = resultados[0]
+    ref_por_factura = (
+        [f.importe_total for f in facturas] if ref_origen == "importe_real" and real_total is not None
+        else (ref_actual["por_factura"] if ref_actual else None)
+    )
+    if mejor["tipo"] == "pvpc" and ref_por_factura:
+        peores = [
+            f"{f.fecha_inicio:%m/%Y}" for f, pv, ref in zip(facturas, mejor["por_factura"], ref_por_factura, strict=False)
+            if ref is not None and pv > ref
+        ]  # fmt: skip
+        texto = (
+            "El PVPC sale más barato con los precios de mercado de este periodo, pero cambia cada hora y nadie "
+            "garantiza que el futuro se parezca al pasado."
+        )
+        if peores:
+            texto += f" Habría salido más caro en {len(peores)} de {len(facturas)} facturas: {', '.join(peores)}."
+        base["avisos"].append(texto)
+
     base["facturas"] = filas
     base["tarifas"] = resultados
     base["resumen"] = {
@@ -215,6 +262,7 @@ def comparar(
         },
         "importe_real_total": _r(real_total),
         "referencia": ref_origen,
+        "modo": modo,
         "referencia_total": _r(ref_total),
         "referencia_anual": _r(ref_total * factor_anual) if ref_total is not None else None,
         "mejor": resultados[0]["tarifa_id"],
@@ -439,7 +487,9 @@ def sincronizar_potencia_actual(s: Session, dom: Domicilio) -> None:
 
 
 def guardar_tramos_importados(s: Session, dom: Domicilio, tramos: list[dict], origen: str) -> int:
-    """Sustituye los tramos de un origen (octopus, datadis) por los recién importados. Los manuales no se tocan."""
+    """Sustituye los tramos de un origen (octopus, datadis) por los recién importados. Los manuales no se tocan.
+    Los tramos seguidos con la misma potencia se juntan en uno (Octopus crea un contrato por cada cambio de precios)."""
+    tramos = juntar_tramos(tramos)
     for p in s.exec(select(PotenciaContratada).where(
         PotenciaContratada.domicilio_id == dom.id, PotenciaContratada.origen == origen
     )):  # fmt: skip
@@ -486,3 +536,102 @@ def importes_calculados(s: Session, dom: Domicilio) -> dict:
         d = calcular(a_consumo(f), precios, vig, f.fecha_emision)
         importes[f.id] = {"total": round(d.total, 2), "tarifa": t.nombre, "precision": precision}
     return {"importes": importes, "tarifa_actual": actual.nombre if actual else None}
+
+
+# ======================================== Facturas reales traídas de Octopus
+def _kwh_por_periodo(s: Session, domicilio_id: int, desde: date, hasta: date) -> tuple[dict[str, float], int, int]:
+    """kWh por periodo del consumo horario entre dos días (incluidos), horas con dato y horas esperadas."""
+    ini, fin = limites_utc(desde, hasta)
+    kwh = {"p1": 0.0, "p2": 0.0, "p3": 0.0}
+    n = 0
+    q = select(ConsumoHorario).where(
+        ConsumoHorario.domicilio_id == domicilio_id, ConsumoHorario.inicio_utc >= ini, ConsumoHorario.inicio_utc < fin
+    )
+    for c in s.exec(q):
+        kwh[periodo_utc(c.inicio_utc)] += c.kwh
+        n += 1
+    return kwh, n, horas_esperadas(desde, hasta)
+
+
+def elegir_fin(s: Session, domicilio_id: int, f: dict) -> tuple[date, str]:
+    """Octopus no siempre incluye el último día del periodo. Se decide comparando los kWh facturados con el
+    consumo horario contando y sin contar ese día; sin kWh, se usa lo visto en sus facturas (lo incluye
+    solo cuando el periodo termina el 31 de diciembre)."""
+    con = f["hasta"]
+    sin = f["hasta"] - timedelta(days=1) if f["hasta"] > f["desde"] else f["hasta"]
+    if f.get("kwh"):
+        k_con = sum(_kwh_por_periodo(s, domicilio_id, f["desde"], con)[0].values())
+        k_sin = sum(_kwh_por_periodo(s, domicilio_id, f["desde"], sin)[0].values())
+        if k_con or k_sin:
+            return (con, "kwh") if abs(k_con - f["kwh"]) < abs(k_sin - f["kwh"]) else (sin, "kwh")
+    return (con if (f["hasta"].month, f["hasta"].day) == (12, 31) else sin), "regla"
+
+
+def importar_facturas_octopus(s: Session, dom: Domicilio, facturas: list[dict]) -> dict:
+    """Crea (o actualiza) una factura por cada factura de Octopus, con su periodo, emisión y total reales.
+
+    Los kWh por periodo salen del consumo horario de esas fechas. Sustituye a las facturas mensuales creadas desde
+    el consumo que se solapen; las introducidas a mano no se tocan.
+    """
+    existentes = list(s.exec(select(Factura).where(Factura.domicilio_id == dom.id)))
+    por_numero = {f.numero: f for f in existentes if f.origen == "octopus" and f.numero}
+    tramos = tramos_potencia(s, dom.id)
+    creadas = actualizadas = sustituidas = 0
+    omitidas: list[str] = []
+    for fo in facturas:
+        etiqueta = f"{fo['desde']:%d/%m/%Y}–{fo['hasta']:%d/%m/%Y}"
+        fin, _metodo = elegir_fin(s, dom.id, fo)
+        kwh, horas, esperadas = _kwh_por_periodo(s, dom.id, fo["desde"], fin)
+        if horas < esperadas:
+            omitidas.append(f"{etiqueta} (consumo horario incompleto: {horas}/{esperadas} h)")
+            continue
+        manual = next(
+            (f for f in existentes if f.origen not in ("horario", "octopus") and f.fecha_inicio <= fin and fin_efectivo(f) >= fo["desde"]),
+            None,
+        )
+        if manual:
+            omitidas.append(f"{etiqueta} (ya hay una factura introducida a mano en esas fechas)")
+            continue
+        solapadas = [
+            f for f in existentes if f.origen == "horario" and f.fecha_inicio <= fin and fin_efectivo(f) >= fo["desde"]
+        ]
+        for f in solapadas:
+            s.delete(f)
+            sustituidas += 1
+        existentes = [f for f in existentes if f not in solapadas]
+        kw1, kw2 = potencia_media(tramos, fo["desde"], fin, (dom.potencia_p1_kw, dom.potencia_p2_kw))
+        datos = {
+            "fecha_inicio": fo["desde"], "fecha_fin": fo["hasta"], "dias": (fin - fo["desde"]).days + 1,
+            "fecha_emision": fo["emision"], "kwh_p1": round(kwh["p1"], 3), "kwh_p2": round(kwh["p2"], 3),
+            "kwh_p3": round(kwh["p3"], 3), "kw_p1": kw1, "kw_p2": kw2, "importe_total": fo["total"],
+            "comercializadora": "Octopus Energy",
+        }  # fmt: skip
+        nota = f"Factura de Octopus. kWh facturados: {fo['kwh']}" if fo.get("kwh") is not None else "Factura de Octopus."
+        if fo["id"] in por_numero:
+            f = por_numero[fo["id"]]
+            for k, v in datos.items():
+                setattr(f, k, v)
+            f.notas = nota
+            actualizadas += 1
+        else:
+            f = Factura(domicilio_id=dom.id, numero=fo["id"], origen="octopus", notas=nota, **datos)
+            creadas += 1
+        s.add(f)
+    s.commit()
+    return {"creadas": creadas, "actualizadas": actualizadas, "sustituidas": sustituidas, "omitidas": omitidas}
+
+
+def juntar_tramos(tramos: list[dict]) -> list[dict]:
+    """Une tramos seguidos (o solapados) con la misma potencia en uno solo."""
+    salida: list[dict] = []
+    for t in sorted(tramos, key=lambda x: x["desde"]):
+        if salida:
+            prev = salida[-1]
+            misma = (prev["kw_p1"], prev["kw_p2"]) == (t["kw_p1"], t["kw_p2"])
+            pegado = prev["hasta"] is None or t["desde"] <= prev["hasta"] + timedelta(days=1)
+            if misma and pegado:
+                if prev["hasta"] is not None:
+                    prev["hasta"] = None if t["hasta"] is None else max(prev["hasta"], t["hasta"])
+                continue
+        salida.append(dict(t))
+    return salida

@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -249,12 +249,13 @@ class PeticionComparativa(BaseModel):
     desde: date | None = None
     hasta: date | None = None
     tarifa_ids: list[int] | None = None
+    modo: Literal["hoy", "pagado"] = "hoy"
 
 
 @router.post("/comparativa")
 def comparativa(p: PeticionComparativa, s: SessionDep):
     d = _obtener(s, Domicilio, p.domicilio_id)
-    return servicios.comparar(s, d, p.desde, p.hasta, p.tarifa_ids)
+    return servicios.comparar(s, d, p.desde, p.hasta, p.tarifa_ids, p.modo)
 
 
 # ------------------------------------------------------ Parámetros regulados
@@ -577,3 +578,23 @@ def descargar_copia_automatica(nombre: str):
     if not ruta.is_file():
         raise HTTPException(404, "Copia no encontrada")
     return FileResponse(ruta, media_type="application/vnd.sqlite3", filename=f"compelectrix-{nombre}")
+
+
+
+class PeticionFacturasOctopus(BaseModel):
+    credenciales: Credenciales
+    cuenta: str
+
+
+@router.post("/domicilios/{id_}/facturas/octopus")
+def importar_facturas_octopus(id_: int, p: PeticionFacturasOctopus, s: SessionDep):
+    """Trae las facturas de Octopus con sus periodos, fecha de emisión y total pagado."""
+    d = _obtener(s, Domicilio, id_)
+    cliente = ClienteOctopus(p.credenciales.usuario.strip(), p.credenciales.clave.get_secret_value())
+    try:
+        facturas = cliente.facturas(p.cuenta)
+    except ErrorOctopus as e:
+        raise HTTPException(502, str(e)) from e
+    if not facturas:
+        raise HTTPException(404, "Octopus no ha devuelto facturas para esa cuenta.")
+    return servicios.importar_facturas_octopus(s, d, facturas) | {"total": len(facturas)}
