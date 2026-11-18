@@ -126,6 +126,7 @@ export function FormFactura({ domicilio, inicial, tarifas, hecho, cancelar }: {
   const { v, campo } = useFormulario({
     fecha_inicio: inicial?.fecha_inicio ?? "",
     fecha_fin: inicial?.fecha_fin ?? "",
+    dias: inicial?.dias ?? "",
     comercializadora: inicial?.comercializadora ?? "",
     tarifa_id: inicial?.tarifa_id ?? domicilio.tarifa_actual_id ?? "",
     numero: inicial?.numero ?? "",
@@ -145,6 +146,7 @@ export function FormFactura({ domicilio, inicial, tarifas, hecho, cancelar }: {
       domicilio_id: domicilio.id,
       fecha_inicio: v.fecha_inicio,
       fecha_fin: v.fecha_fin,
+      dias: aNum(v.dias, null),
       comercializadora: aTexto(v.comercializadora),
       tarifa_id: aNum(v.tarifa_id, null),
       numero: aTexto(v.numero),
@@ -164,12 +166,19 @@ export function FormFactura({ domicilio, inicial, tarifas, hecho, cancelar }: {
   const n = (k: Parameters<typeof campo>[0], paso = "0.01") => (
     <input className="entrada num" type="number" step={paso} min="0" {...campo(k)} />
   );
+  const diasCalculados =
+    v.fecha_inicio && v.fecha_fin
+      ? Math.round((+new Date(String(v.fecha_fin)) - +new Date(String(v.fecha_inicio))) / 864e5) + 1
+      : null;
 
   return (
     <form onSubmit={enviar}>
       <Rejilla cols={3}>
         <Campo etiqueta="Desde *"><input className="entrada" type="date" required {...campo("fecha_inicio")} /></Campo>
-        <Campo etiqueta="Hasta *" ayuda="Incluido"><input className="entrada" type="date" required {...campo("fecha_fin")} /></Campo>
+        <Campo etiqueta="Hasta *"><input className="entrada" type="date" required {...campo("fecha_fin")} /></Campo>
+        <Campo etiqueta="Días facturados" ayuda={`Opcional: los que indique la factura. Vacío = ${diasCalculados ?? "del primer al último día, ambos incluidos"}`}>
+          <input className="entrada num" type="number" min="1" max="400" step="1" {...campo("dias")} placeholder={diasCalculados ? String(diasCalculados) : ""} />
+        </Campo>
         <Campo etiqueta="Nº factura"><input className="entrada" {...campo("numero")} /></Campo>
         <Campo etiqueta="Comercializadora"><input className="entrada" {...campo("comercializadora")} /></Campo>
         <Campo etiqueta="Tarifa aplicada" className="sm:col-span-2">

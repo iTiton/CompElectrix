@@ -27,12 +27,12 @@ def test_factura_calculada_a_mano():
 
 def test_descuento_cuota_y_bono():
     t = PreciosTarifa(0.1, 0.1, 0.15, 0.15, 0.15, cuota_fija_mes=3.0, descuento_energia_pct=10)
-    v = Vigencia(date(2021, 6, 1), None, bono_social_eur_anio=7.3)
+    v = Vigencia(date(2021, 6, 1), None, bono_social_eur_anio=7.3, iee_incluye_bono_social=True)
     d = calcular(JUNIO, t, [v])
     assert d.descuento_energia == pytest.approx(4.5)
     assert d.cuota_fija == pytest.approx(3.0 * 12 / 365 * 30)
     assert d.bono_social == pytest.approx(0.6)
-    # el bono social entra en la base del IEE por defecto
+    # con la opción activada, el bono social entra en la base del IEE
     assert d.base_iee == pytest.approx(20.70 + 40.50 + 0.6)
 
 
@@ -69,3 +69,9 @@ def test_dias_sin_vigencia_generan_aviso():
 def test_fechas_invertidas():
     with pytest.raises(ValueError):
         calcular(Consumo(date(2025, 6, 2), date(2025, 6, 1)), TARIFA, [VIG])
+
+
+def test_por_defecto_el_iee_no_incluye_el_bono_social():
+    v = Vigencia(date(2021, 6, 1), None, bono_social_eur_anio=7.3)
+    d = calcular(JUNIO, TARIFA, [v])
+    assert d.base_iee == pytest.approx(d.termino_potencia + d.termino_energia)

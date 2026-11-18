@@ -40,6 +40,7 @@ export interface Factura {
   domicilio_id: number;
   fecha_inicio: string;
   fecha_fin: string;
+  dias: number | null;
   comercializadora: string | null;
   tarifa_id: number | null;
   numero: string | null;
@@ -236,4 +237,15 @@ export interface ResultadoImportacion {
   avisos: string[];
   desde?: string;
   hasta?: string;
+}
+
+export interface TramoPotencia {
+  id: number;
+  domicilio_id: number;
+  desde: string;
+  hasta: string | null;
+  kw_p1: number;
+  kw_p2: number;
+  origen: string;
+  nota: string | null;
 }

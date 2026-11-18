@@ -1,17 +1,21 @@
-import { ArrowLeft, BarChart3, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
+import { ArrowLeft, BarChart3, FilePlus2, Pencil, Plus, Receipt, Trash2 } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type Domicilio, type Factura, type Tarifa } from "../api";
+import { api, type Domicilio, type Factura, type ResumenConsumo, type Tarifa } from "../api";
 import { FormDomicilio, FormFactura } from "../components/formularios";
 import { Aviso, Cabecera, eur, fecha, Modal, num, useDatos, Vacio } from "../components/ui";
 
 const ConsumoHorario = lazy(() => import("../components/ConsumoHorario"));
+const HistorialPotencia = lazy(() => import("../components/HistorialPotencia"));
 
 export default function DomicilioPage() {
   const { id } = useParams();
   const ir = useNavigate();
   const dom = useDatos<Domicilio>(`/domicilios/${id}`);
   const facs = useDatos<Factura[]>(`/domicilios/${id}/facturas`);
+  const consumo = useDatos<ResumenConsumo>(`/domicilios/${id}/consumo`);
+  const [generando, setGenerando] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
   const { datos: tarifas } = useDatos<Tarifa[]>("/tarifas");
   const [editando, setEditando] = useState(false);
   const [factura, setFactura] = useState<Factura | "nueva" | null>(null);
@@ -23,6 +27,21 @@ export default function DomicilioPage() {
   const lista = facs.datos ?? [];
   const totalKwh = lista.reduce((a, f) => a + f.kwh_p1 + f.kwh_p2 + f.kwh_p3, 0);
   const totalEur = lista.reduce((a, f) => a + (f.importe_total ?? 0), 0);
+
+  const mesesCompletos = consumo.datos?.meses.filter((m) => m.completo).length ?? 0;
+  const crearDesdeConsumo = async () => {
+    setGenerando(true);
+    try {
+      const r = await api.post<{ creadas: string[]; incompletos: string[] }>(`/domicilios/${d.id}/consumo/generar-facturas`, {});
+      setAviso(
+        `Creadas ${r.creadas.length} facturas mensuales a partir del consumo horario.` +
+          (r.incompletos.length ? ` Meses incompletos sin crear: ${r.incompletos.join(", ")}.` : ""),
+      );
+      facs.recargar();
+    } finally {
+      setGenerando(false);
+    }
+  };
 
   const borrarDomicilio = async () => {
     if (!confirm(`¿Borrar "${d.nombre}" y sus ${lista.length} facturas? No se puede deshacer.`)) return;
@@ -51,9 +70,22 @@ export default function DomicilioPage() {
         <Dato t="Importe registrado" v={eur(totalEur)} s={d.distribuidora ?? undefined} />
       </div>
 
+      {aviso && <div className="mb-4"><Aviso tipo="ok">{aviso}</Aviso></div>}
       {lista.length === 0 ? (
         <Vacio icono={<Receipt />} titulo="Sin facturas">
-          Añade tus facturas para poder comparar. Con 12 meses la estimación anual recoge la estacionalidad.
+          {mesesCompletos > 0 ? (
+            <>
+              Ya tienes consumo horario de {mesesCompletos} mes{mesesCompletos === 1 ? "" : "es"} completo{mesesCompletos === 1 ? "" : "s"}.
+              Crea con él una factura por mes para poder comparar tarifas; después puedes editarlas para añadir lo que pagaste.
+              <div className="mt-4">
+                <button className="btn-primario" onClick={crearDesdeConsumo} disabled={generando}>
+                  <FilePlus2 size={16} /> {generando ? "Creando…" : `Crear ${mesesCompletos} facturas desde el consumo`}
+                </button>
+              </div>
+            </>
+          ) : (
+            "Añade tus facturas para poder comparar, o importa tu consumo horario más abajo y crea las facturas a partir de él. Con 12 meses la estimación anual recoge la estacionalidad."
+          )}
         </Vacio>
       ) : (
         <div className="tarjeta overflow-x-auto p-0">
@@ -66,7 +98,7 @@ export default function DomicilioPage() {
             </thead>
             <tbody>
               {lista.map((f) => {
-                const dias = Math.round((+new Date(f.fecha_fin) - +new Date(f.fecha_inicio)) / 864e5) + 1;
+                const dias = f.dias ?? Math.round((+new Date(f.fecha_fin) - +new Date(f.fecha_inicio)) / 864e5) + 1;
                 return (
                   <tr key={f.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
                     <td>{fecha(f.fecha_inicio)} – {fecha(f.fecha_fin)}<span className="block text-xs text-zinc-500">{f.origen === "horario" ? "Desde consumo horario" : f.comercializadora}</span></td>
@@ -89,7 +121,8 @@ export default function DomicilioPage() {
       )}
 
       <Suspense fallback={null}>
-        <ConsumoHorario domicilio={d} alCambiar={facs.recargar} />
+        <HistorialPotencia domicilio={d} alCambiar={() => (facs.recargar(), dom.recargar())} />
+        <ConsumoHorario domicilio={d} alCambiar={() => (facs.recargar(), consumo.recargar(), dom.recargar())} />
       </Suspense>
 
       <div className="mt-8 text-right">

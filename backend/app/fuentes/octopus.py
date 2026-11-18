@@ -102,6 +102,10 @@ class ClienteOctopus:
                 )
         return salida
 
+    def potencias(self, cuenta: str, propiedad_id: str) -> list[dict]:
+        """Potencia contratada en cada contrato, con sus fechas (para el historial de potencias)."""
+        return interpretar_potencias(self._consulta(CONSULTA_POTENCIAS, {"cuenta": cuenta}), propiedad_id)
+
     def consumos(self, propiedad_id: str, desde: date, hasta: date) -> list[tuple[datetime, float, bool]]:
         """Horas de consumo como (inicio UTC sin zona, kWh, real)."""
         horas: list[tuple[datetime, float, bool]] = []
@@ -125,3 +129,51 @@ class ClienteOctopus:
                 break
             despues = m["pageInfo"]["endCursor"]
         return sorted(horas)
+
+
+CONSULTA_POTENCIAS = """
+query($cuenta: String!) {
+  account(accountNumber: $cuenta) {
+    properties { id electricitySupplyPoints { cups agreements { validFrom validTo details { contractualMaxPower } } } }
+  }
+}"""
+
+
+def _a_dia_local(texto: str | None, fin: bool = False):
+    """Fecha local de un instante de Octopus. Para el fin de un contrato, el último día completo."""
+    if not texto:
+        return None
+    from datetime import timedelta
+
+    from ..motor.periodos import a_local
+
+    local = a_local(datetime.fromisoformat(texto))
+    if fin and local.hour == 0 and local.minute == 0:
+        return (local - timedelta(days=1)).date()  # termina a las 0:00: ese día ya no cuenta
+    return local.date()
+
+
+def interpretar_potencias(datos: dict, propiedad_id: str) -> list[dict]:
+    """Tramos de potencia de los contratos de una propiedad. Octopus da una sola potencia: se usa en P1 y P2."""
+    tramos = []
+    for p in (datos.get("account") or {}).get("properties") or []:
+        if str(p.get("id")) != str(propiedad_id):
+            continue
+        for sp in p.get("electricitySupplyPoints") or []:
+            for a in sp.get("agreements") or []:
+                kw = (a.get("details") or {}).get("contractualMaxPower")
+                desde = _a_dia_local(a.get("validFrom"))
+                if kw in (None, "") or desde is None:
+                    continue
+                kw = float(kw)
+                if kw > 100:  # en vatios
+                    kw /= 1000
+                if not 0 < kw <= 15:
+                    continue
+                tramos.append({
+                    "desde": desde, "hasta": _a_dia_local(a.get("validTo"), fin=True),
+                    "kw_p1": round(kw, 3), "kw_p2": round(kw, 3), "nota": "Contrato de Octopus",
+                })  # fmt: skip
+    return sorted(tramos, key=lambda t: t["desde"])
+
+

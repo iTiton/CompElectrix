@@ -101,6 +101,12 @@ class ClienteDatadis:
             for s in datos
         ]
 
+    def potencias(self, cups: str, codigo_distribuidora: str) -> list[dict]:
+        """Potencias contratadas (P1, P2) de cada contrato de acceso, con sus fechas."""
+        return interpretar_contratos(
+            self._get("get-contract-detail", {"cups": cups, "distributorCode": codigo_distribuidora})
+        )
+
     def consumos(
         self, cups: str, codigo_distribuidora: str, tipo_punto: int | str, desde: date, hasta: date
     ) -> list[Registro]:
@@ -132,3 +138,32 @@ class ClienteDatadis:
                 except (KeyError, ValueError, TypeError):
                     continue
         return registros
+
+
+def interpretar_contratos(datos) -> list[dict]:
+    """Tramos de potencia de los contratos de acceso que da Datadis (P1 y P2 por separado)."""
+    tramos = []
+    for c in _lista(datos, "contract", "response"):
+        pot = c.get("contractedPowerkW") or []
+        if isinstance(pot, (int, float, str)):
+            pot = [pot]
+        try:
+            kw = [float(x) for x in pot if x not in (None, "")]
+            desde = fecha(c["startDate"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if not kw or not 0 < kw[0] <= 15:
+            continue
+        hasta = None
+        if c.get("endDate"):
+            try:
+                hasta = fecha(c["endDate"])
+            except ValueError:
+                pass
+        tramos.append({
+            "desde": desde, "hasta": hasta, "kw_p1": kw[0], "kw_p2": kw[1] if len(kw) > 1 else kw[0],
+            "nota": "Contrato de la distribuidora (Datadis)",
+        })  # fmt: skip
+    return sorted(tramos, key=lambda t: t["desde"])
+
+

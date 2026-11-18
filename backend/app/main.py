@@ -7,7 +7,7 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -39,6 +39,8 @@ if FRONTEND_DIR.is_dir():
 
     @app.get("/{ruta:path}", include_in_schema=False)
     def spa(ruta: str, request: Request):
+        if ruta == "api" or ruta.startswith("api/"):
+            raise HTTPException(404, "Ruta de la API inexistente")
         fichero = (FRONTEND_DIR / ruta).resolve()
         if ruta and fichero.is_file() and FRONTEND_DIR.resolve() in fichero.parents:
             return FileResponse(fichero)

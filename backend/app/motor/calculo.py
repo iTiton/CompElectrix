@@ -65,7 +65,7 @@ class Vigencia:
     iva_pct: float = 21.0
     alquiler_contador_eur_dia: float = 0.81 * 12 / DIAS_ANIO
     bono_social_eur_anio: float = 0.0
-    iee_incluye_bono_social: bool = True
+    iee_incluye_bono_social: bool = False
 
     def cubre(self, dia: date) -> bool:
         return self.fecha_desde <= dia and (self.fecha_hasta is None or dia <= self.fecha_hasta)

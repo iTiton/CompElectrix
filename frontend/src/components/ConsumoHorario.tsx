@@ -31,9 +31,10 @@ export default function ConsumoHorario({ domicilio, alCambiar }: { domicilio: Do
     setMensaje({
       tipo: "ok",
       texto: `${num(r.horas)} horas importadas desde ${origen}${r.desde ? ` (${fecha(r.desde)} – ${fecha(r.hasta)})` : ""}.`,
-      extra: r.avisos,
+      extra: [...r.avisos, "Revisa la potencia contratada y, para comparar tarifas, crea las facturas mensuales con el botón de abajo."],
     });
     recargar();
+    alCambiar();
   };
 
   const subir = async (f: File) => {
@@ -70,6 +71,7 @@ export default function ConsumoHorario({ domicilio, alCambiar }: { domicilio: Do
     await api.del(`/domicilios/${domicilio.id}/consumo`);
     setMensaje(null);
     recargar();
+    alCambiar();
   };
 
   const meses = datos?.meses.map((m) => ({ ...m, etiqueta: etiquetaMes(m.mes) })) ?? [];
@@ -327,7 +329,7 @@ function ImportarOctopus({ domicilio, cerrar, hecho }: { domicilio: Domicilio; c
       {imp.error && <Aviso tipo="error">{imp.error}</Aviso>}
       <Pie cerrar={cerrar} puede={!!elegido} ocupado={imp.ocupado} importar={() => imp.ejecutar(async () => {
         hecho(await api.post<ResultadoImportacion>(`/domicilios/${domicilio.id}/consumo/octopus`, {
-          credenciales: cred, propiedad_id: elegido!.propiedad_id, desde: imp.desde, hasta: imp.hasta,
+          credenciales: cred, propiedad_id: elegido!.propiedad_id, cuenta: elegido!.cuenta, desde: imp.desde, hasta: imp.hasta,
         }));
       })} />
     </div>
