@@ -61,7 +61,7 @@ La primera vez tarda unos minutos porque tiene que prepararlo todo. Después arr
 ### ¿Quieres probarla con datos inventados?
 
 ```bash
-docker exec compelectrix python -m scripts.demo
+docker exec -u compelectrix compelectrix python -m scripts.demo
 ```
 
 Solo se carga si la aplicación está vacía. Después puedes borrar los domicilios de ejemplo desde la propia aplicación.
@@ -119,6 +119,9 @@ La interfaz construye entonces todas sus direcciones relativas a esa ruta. Sin l
 3. `docker compose up -d`.
 
 CompElectrix aparecerá en la página de inicio de Wall-O y se abrirá en el puerto **8101**.
+
+**Con Portainer**: crea un stack desde el repositorio con *Compose path* `portainer.yml`. Los pasos completos,
+junto con los de Wall-O, están en [la guía de Portainer de Wall-O](https://github.com/iTiton/Wall-O/blob/main/docs/portainer.md).
 
 ## Configuración
 

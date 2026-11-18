@@ -39,6 +39,13 @@ Todo el texto de la interfaz, el código y la documentación va en español.
     para que el nombre apunte al NAS dentro de la VPN. Sin confirmar: qué puertos redirige su router y qué protocolo usa la VPN.
   - Fase 4: ofertas del comparador de la CNMC. Fase 5: informes PDF. Fase 6: guía de despliegue. Fase 7: gas (TUR).
 
+## Versiones y ramas
+
+- `main` es la versión estable (la que se instala). La 1.00 se fusionó el 15/11/2026.
+- La siguiente versión (1.01, 1.02…) se trabaja en una rama aparte. Cuando está madura, se crea una pull request
+  hacia `main` y la fusiona Claude cuando la persona usuaria lo pide. Después, la siguiente versión empieza en otra rama.
+- No subir nada directamente a `main`.
+
 ## Comprobaciones antes de entregar
 
 ```bash
