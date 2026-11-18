@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session, func, select
 
-from .models import ConsumoHorario, Domicilio, Factura, PrecioHorario, Tarifa, VigenciaRegulada
+from .models import ConsumoHorario, Domicilio, Factura, PotenciaContratada, PrecioHorario, Tarifa, VigenciaRegulada
 from .motor.calculo import DIAS_ANIO, Consumo, Desglose, PreciosTarifa, Vigencia, calcular
 from .motor.periodos import a_local, horas_esperadas, limites_utc, periodo_local, periodo_utc
 
@@ -304,6 +304,7 @@ def resumen_consumo(s: Session, domicilio_id: int) -> dict:
 def generar_facturas_desde_consumo(s: Session, dom: Domicilio) -> dict:
     """Crea una 'factura' por cada mes completo de consumo horario que no tenga ya factura."""
     existentes = list(s.exec(select(Factura).where(Factura.domicilio_id == dom.id)))
+    tramos = tramos_potencia(s, dom.id)
     creadas, con_factura, incompletos = [], [], []
     for (a, m), v in sorted(_consumo_por_mes(s, dom.id).items()):
         ini, fin = date(a, m, 1), _ultimo_dia(a, m)
@@ -314,10 +315,11 @@ def generar_facturas_desde_consumo(s: Session, dom: Domicilio) -> dict:
         if any(f.fecha_inicio <= fin and f.fecha_fin >= ini for f in existentes):
             con_factura.append(etiqueta)
             continue
+        kw1, kw2 = potencia_media(tramos, ini, fin, (dom.potencia_p1_kw, dom.potencia_p2_kw))
         f = Factura(
             domicilio_id=dom.id, fecha_inicio=ini, fecha_fin=fin,
             kwh_p1=round(v["p1"], 3), kwh_p2=round(v["p2"], 3), kwh_p3=round(v["p3"], 3),
-            kw_p1=dom.potencia_p1_kw, kw_p2=dom.potencia_p2_kw, origen="horario",
+            kw_p1=kw1, kw_p2=kw2, origen="horario",
             notas="Generada a partir del consumo horario (sin importe real).",
         )  # fmt: skip
         s.add(f)
@@ -380,3 +382,71 @@ class DatosHorarios:
         if completo:
             return {p: (coste[p] / kwh[p] if kwh[p] else media[p]) for p in coste}, "horario"
         return media, "estimado"
+
+
+# ================================================== Historial de potencias
+def tramos_potencia(s: Session, domicilio_id: int) -> list[PotenciaContratada]:
+    q = select(PotenciaContratada).where(PotenciaContratada.domicilio_id == domicilio_id)
+    return sorted(s.exec(q), key=lambda p: p.desde)
+
+
+def potencia_en(tramos: list[PotenciaContratada], dia: date) -> tuple[float, float] | None:
+    """Potencia vigente un día. Si dos tramos se solapan, manda el que empezó más tarde."""
+    for p in reversed(tramos):
+        if p.desde <= dia and (p.hasta is None or dia <= p.hasta):
+            return p.kw_p1, p.kw_p2
+    return None
+
+
+def potencia_media(tramos: list[PotenciaContratada], desde: date, hasta: date, defecto: tuple[float, float]) -> tuple[float, float]:
+    """Potencia media de un periodo ponderada por días.
+
+    Como la potencia se paga por kW y día, la media ponderada da exactamente el mismo importe
+    que facturar cada tramo por separado. Los días sin tramo usan la potencia del domicilio.
+    """
+    dias = (hasta - desde).days + 1
+    suma1 = suma2 = 0.0
+    d = desde
+    while d <= hasta:
+        kw1, kw2 = potencia_en(tramos, d) or defecto
+        suma1 += kw1
+        suma2 += kw2
+        d += timedelta(days=1)
+    return round(suma1 / dias, 4), round(suma2 / dias, 4)
+
+
+def recalcular_potencia_facturas(s: Session, dom: Domicilio) -> int:
+    """Aplica el historial a las facturas creadas desde el consumo horario (no a las introducidas a mano)."""
+    tramos = tramos_potencia(s, dom.id)
+    n = 0
+    for f in s.exec(select(Factura).where(Factura.domicilio_id == dom.id, Factura.origen == "horario")):
+        kw = potencia_media(tramos, f.fecha_inicio, fin_efectivo(f), (dom.potencia_p1_kw, dom.potencia_p2_kw))
+        if (f.kw_p1, f.kw_p2) != kw:
+            f.kw_p1, f.kw_p2 = kw
+            s.add(f)
+            n += 1
+    s.commit()
+    return n
+
+
+def sincronizar_potencia_actual(s: Session, dom: Domicilio) -> None:
+    """La potencia «actual» del domicilio es la del tramo vigente hoy, si lo hay."""
+    actual = potencia_en(tramos_potencia(s, dom.id), date.today())
+    if actual and (dom.potencia_p1_kw, dom.potencia_p2_kw) != actual:
+        dom.potencia_p1_kw, dom.potencia_p2_kw = actual
+        s.add(dom)
+        s.commit()
+
+
+def guardar_tramos_importados(s: Session, dom: Domicilio, tramos: list[dict], origen: str) -> int:
+    """Sustituye los tramos de un origen (octopus, datadis) por los recién importados. Los manuales no se tocan."""
+    for p in s.exec(select(PotenciaContratada).where(
+        PotenciaContratada.domicilio_id == dom.id, PotenciaContratada.origen == origen
+    )):  # fmt: skip
+        s.delete(p)
+    for t in tramos:
+        s.add(PotenciaContratada(domicilio_id=dom.id, origen=origen, **t))
+    s.commit()
+    sincronizar_potencia_actual(s, dom)
+    recalcular_potencia_facturas(s, dom)
+    return len(tramos)

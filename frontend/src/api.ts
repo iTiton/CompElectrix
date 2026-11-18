@@ -238,3 +238,14 @@ export interface ResultadoImportacion {
   desde?: string;
   hasta?: string;
 }
+
+export interface TramoPotencia {
+  id: number;
+  domicilio_id: number;
+  desde: string;
+  hasta: string | null;
+  kw_p1: number;
+  kw_p2: number;
+  origen: string;
+  nota: string | null;
+}

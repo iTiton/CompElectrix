@@ -22,6 +22,17 @@ Todo el texto de la interfaz, el código y la documentación va en español.
   La rebaja temporal de marzo–mayo de 2026 no está cargada (fechas sin confirmar).
 - **Subruta**: la app funciona tras un proxy con `X-Forwarded-Prefix` (inyecta `<base href>`), aunque se ha optado por
   un **puerto por servicio**.
+- **Cálculo validado con facturas reales de Octopus** (`backend/tests/test_factura_real.py`, 67,48 €): la base del IEE
+  es potencia + energía (sin bono social). Octopus no cuenta los días igual en todas sus facturas (a veces incluye el
+  último día y a veces no), por eso existe el campo opcional `dias` en la factura.
+- **Historial de potencias** por domicilio (tabla `potenciacontratada`). Las facturas con origen «horario» usan la
+  media ponderada por días de la potencia vigente (es exacta, porque la potencia se paga por kW·día) y se recalculan
+  al editar el historial. Las facturas manuales conservan su potencia. Se rellena al importar: Datadis
+  (`get-contract-detail`, P1 y P2) y Octopus (`agreements.details.contractualMaxPower`, un solo valor). Los dos están
+  **sin probar con una cuenta real** en esta parte. Caso real de la persona usuaria: 3,5 kW hasta el 11/02/2026 y
+  4,5 kW desde el 12/02/2026.
+- **Los precios de las tarifas cambian con el tiempo** (Octopus: peajes en enero, margen de P2 de 0,025 a 0,027).
+  La comparativa usa los precios actuales de cada tarifa. Pendiente, quizá: un historial de precios por tarifa.
 - **Disco**: base de datos < 1 MB por año de datos horarios. Panel en Ajustes → Almacenamiento, con un botón para compactar.
 
 ## Estado

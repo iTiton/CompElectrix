@@ -6,6 +6,7 @@ import { FormDomicilio, FormFactura } from "../components/formularios";
 import { Aviso, Cabecera, eur, fecha, Modal, num, useDatos, Vacio } from "../components/ui";
 
 const ConsumoHorario = lazy(() => import("../components/ConsumoHorario"));
+const HistorialPotencia = lazy(() => import("../components/HistorialPotencia"));
 
 export default function DomicilioPage() {
   const { id } = useParams();
@@ -120,7 +121,8 @@ export default function DomicilioPage() {
       )}
 
       <Suspense fallback={null}>
-        <ConsumoHorario domicilio={d} alCambiar={() => (facs.recargar(), consumo.recargar())} />
+        <HistorialPotencia domicilio={d} alCambiar={() => (facs.recargar(), dom.recargar())} />
+        <ConsumoHorario domicilio={d} alCambiar={() => (facs.recargar(), consumo.recargar(), dom.recargar())} />
       </Suspense>
 
       <div className="mt-8 text-right">

@@ -131,3 +131,20 @@ class Ajuste(SQLModel, table=True):
 
     clave: str = Field(primary_key=True)
     valor: str
+
+
+# --------------------------------------------------- Historial de potencias
+class PotenciaBase(SQLModel):
+    """Potencia contratada durante un tramo de fechas. Sin «hasta», sigue vigente."""
+
+    desde: date
+    hasta: date | None = None
+    kw_p1: float = Field(gt=0, le=15)
+    kw_p2: float = Field(gt=0, le=15)
+    origen: str = Field(default="manual", description="manual | octopus | datadis")
+    nota: str | None = None
+
+
+class PotenciaContratada(PotenciaBase, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    domicilio_id: int = Field(foreign_key="domicilio.id", index=True)

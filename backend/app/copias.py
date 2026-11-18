@@ -110,6 +110,7 @@ TABLAS_CSV = {
     "domicilio": "domicilios",
     "tarifa": "tarifas",
     "factura": "facturas",
+    "potenciacontratada": "historial_potencia",
     "consumohorario": "consumo_horario",
     "vigenciaregulada": "impuestos_y_cargos",
 }

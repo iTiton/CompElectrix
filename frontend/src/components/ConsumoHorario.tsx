@@ -31,7 +31,7 @@ export default function ConsumoHorario({ domicilio, alCambiar }: { domicilio: Do
     setMensaje({
       tipo: "ok",
       texto: `${num(r.horas)} horas importadas desde ${origen}${r.desde ? ` (${fecha(r.desde)} – ${fecha(r.hasta)})` : ""}.`,
-      extra: [...r.avisos, "Para comparar tarifas, crea las facturas mensuales con el botón de abajo."],
+      extra: [...r.avisos, "Revisa la potencia contratada y, para comparar tarifas, crea las facturas mensuales con el botón de abajo."],
     });
     recargar();
     alCambiar();
@@ -329,7 +329,7 @@ function ImportarOctopus({ domicilio, cerrar, hecho }: { domicilio: Domicilio; c
       {imp.error && <Aviso tipo="error">{imp.error}</Aviso>}
       <Pie cerrar={cerrar} puede={!!elegido} ocupado={imp.ocupado} importar={() => imp.ejecutar(async () => {
         hecho(await api.post<ResultadoImportacion>(`/domicilios/${domicilio.id}/consumo/octopus`, {
-          credenciales: cred, propiedad_id: elegido!.propiedad_id, desde: imp.desde, hasta: imp.hasta,
+          credenciales: cred, propiedad_id: elegido!.propiedad_id, cuenta: elegido!.cuenta, desde: imp.desde, hasta: imp.hasta,
         }));
       })} />
     </div>

@@ -30,6 +30,8 @@ from .models import (
     DomicilioBase,
     Factura,
     FacturaBase,
+    PotenciaBase,
+    PotenciaContratada,
     PrecioHorario,
     Tarifa,
     TarifaBase,
@@ -108,11 +110,56 @@ def editar_domicilio(id_: int, datos: DomicilioBase, s: SessionDep):
 def borrar_domicilio(id_: int, s: SessionDep):
     d = _obtener(s, Domicilio, id_)
     s.exec(delete(ConsumoHorario).where(ConsumoHorario.domicilio_id == id_))  # type: ignore[call-overload]
+    s.exec(delete(PotenciaContratada).where(PotenciaContratada.domicilio_id == id_))  # type: ignore[call-overload]
     for f in s.exec(select(Factura).where(Factura.domicilio_id == id_)):
         s.delete(f)
     s.flush()  # las facturas primero: no hay relación ORM que fije el orden
     s.delete(d)
     s.commit()
+
+
+# ------------------------------------------------------- Historial de potencias
+@router.get("/domicilios/{id_}/potencias", response_model=list[PotenciaContratada])
+def listar_potencias(id_: int, s: SessionDep):
+    _obtener(s, Domicilio, id_)
+    return servicios.tramos_potencia(s, id_)
+
+
+def _tras_cambiar_potencias(s: Session, d: Domicilio) -> None:
+    servicios.sincronizar_potencia_actual(s, d)
+    servicios.recalcular_potencia_facturas(s, d)
+
+
+class PotenciaEntrada(PotenciaBase):
+    @model_validator(mode="after")
+    def _fechas(self):
+        if self.hasta and self.hasta < self.desde:
+            raise ValueError("La fecha «hasta» no puede ser anterior a «desde»")
+        return self
+
+
+@router.post("/domicilios/{id_}/potencias", response_model=PotenciaContratada, status_code=201)
+def crear_potencia(id_: int, datos: PotenciaEntrada, s: SessionDep):
+    d = _obtener(s, Domicilio, id_)
+    p = _guardar(s, PotenciaContratada(domicilio_id=id_, **datos.model_dump()))
+    _tras_cambiar_potencias(s, d)
+    return p
+
+
+@router.put("/potencias/{id_}", response_model=PotenciaContratada)
+def editar_potencia(id_: int, datos: PotenciaEntrada, s: SessionDep):
+    p = _actualizar(s, _obtener(s, PotenciaContratada, id_), datos)
+    _tras_cambiar_potencias(s, _obtener(s, Domicilio, p.domicilio_id))
+    return p
+
+
+@router.delete("/potencias/{id_}", status_code=204)
+def borrar_potencia(id_: int, s: SessionDep):
+    p = _obtener(s, PotenciaContratada, id_)
+    d = _obtener(s, Domicilio, p.domicilio_id)
+    s.delete(p)
+    s.commit()
+    _tras_cambiar_potencias(s, d)
 
 
 # ------------------------------------------------------------------ Facturas
@@ -374,7 +421,15 @@ def importar_datadis(id_: int, p: PeticionDatadis, s: SessionDep):
         raise HTTPException(404, "Datadis no ha devuelto consumos para ese periodo.")
     res = a_horas_utc(registros)
     n = servicios.guardar_consumo(s, id_, res.horas, "datadis")
-    return {"horas": n, "avisos": res.avisos}
+    avisos = list(res.avisos)
+    try:
+        tramos = cliente.potencias(p.cups, p.codigo_distribuidora)
+        if tramos:
+            servicios.guardar_tramos_importados(s, _obtener(s, Domicilio, id_), tramos, "datadis")
+            avisos.append(f"Historial de potencia actualizado con {len(tramos)} contrato(s) de la distribuidora.")
+    except ErrorDatadis as e:
+        avisos.append(f"No se pudo leer la potencia contratada: {e}")
+    return {"horas": n, "avisos": avisos}
 
 
 @router.post("/octopus/suministros")
@@ -388,6 +443,7 @@ def suministros_octopus(c: Credenciales):
 class PeticionOctopus(BaseModel):
     credenciales: Credenciales
     propiedad_id: str
+    cuenta: str | None = None
     desde: date
     hasta: date
 
@@ -402,7 +458,19 @@ def importar_octopus(id_: int, p: PeticionOctopus, s: SessionDep):
         raise HTTPException(502, str(e)) from e
     if not horas:
         raise HTTPException(404, "Octopus no ha devuelto consumos para ese periodo.")
-    return {"horas": servicios.guardar_consumo(s, id_, horas, "octopus"), "avisos": []}
+    n = servicios.guardar_consumo(s, id_, horas, "octopus")
+    avisos: list[str] = []
+    if p.cuenta:
+        try:
+            tramos = cliente.potencias(p.cuenta, p.propiedad_id)
+            if tramos:
+                servicios.guardar_tramos_importados(s, _obtener(s, Domicilio, id_), tramos, "octopus")
+                avisos.append(f"Historial de potencia actualizado con {len(tramos)} contrato(s) de Octopus. Revísalo en el domicilio.")
+            else:
+                avisos.append("Octopus no ha indicado la potencia contratada: revísala en el domicilio.")
+        except ErrorOctopus as e:
+            avisos.append(f"No se pudo leer la potencia contratada: {e}")
+    return {"horas": n, "avisos": avisos}
 
 
 # ============================================================== Almacenamiento
