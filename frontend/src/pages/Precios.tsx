@@ -71,7 +71,11 @@ export default function Precios() {
                 <YAxis tick={EJE} width={48} tickFormatter={(v: number) => num(v * 100, 0)} label={{ value: "c€/kWh", angle: -90, position: "insideLeft", fill: "#71717a", fontSize: 12 }} />
                 <Tooltip
                   formatter={(v: number) => [cent(v), "Precio"]}
-                  labelFormatter={(h: string, p) => `${h} h · ${NOMBRE_PERIODO[(p?.[0]?.payload as { periodo: "p1" }).periodo] ?? ""}`}
+                  labelFormatter={(h: string, p) => {
+                    // Al salir del gráfico la etiqueta puede llegar sin barra asociada
+                    const periodo = (p?.[0]?.payload as { periodo?: keyof typeof NOMBRE_PERIODO } | undefined)?.periodo;
+                    return periodo ? `${h} h · ${NOMBRE_PERIODO[periodo]}` : `${h} h`;
+                  }}
                   contentStyle={{ borderRadius: 12 }}
                 />
                 <Bar dataKey="precio" radius={[4, 4, 0, 0]}>

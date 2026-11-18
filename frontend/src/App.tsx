@@ -2,6 +2,7 @@ import { BarChart3, Clock, Home, LayoutGrid, Laptop, Menu, Moon, Settings, Sun, 
 import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import AvisoActualizacion from "./components/AvisoActualizacion";
+import RedSeguridad from "./components/RedSeguridad";
 import { useVersion } from "./components/ui";
 import Ajustes from "./pages/Ajustes";
 import DomicilioPage from "./pages/Domicilio";
@@ -128,6 +129,7 @@ export default function App() {
         </div>
       </aside>
       <main className="mx-auto w-full max-w-6xl flex-1 p-4 md:p-8">
+        <RedSeguridad clave={loc.pathname}>
         <Suspense fallback={<p className="text-sm text-zinc-500">Cargando…</p>}>
         <Routes>
           <Route path="/" element={<Inicio />} />
@@ -138,6 +140,7 @@ export default function App() {
           <Route path="/ajustes" element={<Ajustes />} />
         </Routes>
         </Suspense>
+        </RedSeguridad>
       </main>
     </div>
   );
