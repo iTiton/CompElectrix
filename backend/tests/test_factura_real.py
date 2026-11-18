@@ -73,3 +73,22 @@ def test_migracion_desde_una_base_de_datos_anterior(tmp_path, monkeypatch):
     db.init_db()
     ruta = db.engine.url.database
     assert "dias" in {r[1] for r in sqlite3.connect(ruta).execute("PRAGMA table_info(factura)")}
+
+
+def test_importe_calculado_en_la_lista_de_facturas():
+    with TestClient(app) as c:
+        t = c.post("/api/tarifas", json=TARIFA).json()["id"]
+        i = c.post("/api/domicilios", json={"nombre": "Importes", "potencia_p1_kw": 4.5, "potencia_p2_kw": 4.5}).json()["id"]
+        f = c.post("/api/facturas", json={"domicilio_id": i, "fecha_inicio": "2026-09-21", "fecha_fin": "2026-10-20", "dias": 29,
+                                          "kwh_p1": 47, "kwh_p2": 50, "kwh_p3": 175, "kw_p1": 4.5, "kw_p2": 4.5}).json()  # fmt: skip
+        # Sin tarifa: no hay importe calculado
+        r = c.get(f"/api/domicilios/{i}/facturas/importes").json()
+        assert r == {"importes": {}, "tarifa_actual": None}
+        # Con tarifa actual en el domicilio: se calcula con ella
+        dom = c.get(f"/api/domicilios/{i}").json()
+        c.put(f"/api/domicilios/{i}", json={**dom, "tarifa_actual_id": t})
+        r = c.get(f"/api/domicilios/{i}/facturas/importes").json()
+        assert r["tarifa_actual"] == TARIFA["nombre"]
+        assert r["importes"][str(f["id"])]["total"] == pytest.approx(67.48, abs=0.01)
+        c.delete(f"/api/domicilios/{i}")
+        c.delete(f"/api/tarifas/{t}")

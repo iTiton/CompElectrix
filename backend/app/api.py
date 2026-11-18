@@ -179,6 +179,12 @@ def listar_facturas(id_: int, s: SessionDep):
     return list(s.exec(q))
 
 
+@router.get("/domicilios/{id_}/facturas/importes")
+def importes_facturas(id_: int, s: SessionDep):
+    """Importe calculado de cada factura con su tarifa o la actual del domicilio."""
+    return servicios.importes_calculados(s, _obtener(s, Domicilio, id_))
+
+
 @router.post("/facturas", response_model=Factura, status_code=201)
 def crear_factura(datos: FacturaEntrada, s: SessionDep):
     _obtener(s, Domicilio, datos.domicilio_id)

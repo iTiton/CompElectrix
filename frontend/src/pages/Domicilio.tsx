@@ -13,6 +13,9 @@ export default function DomicilioPage() {
   const ir = useNavigate();
   const dom = useDatos<Domicilio>(`/domicilios/${id}`);
   const facs = useDatos<Factura[]>(`/domicilios/${id}/facturas`);
+  const calc = useDatos<{ importes: Record<string, { total: number; tarifa: string; precision: string | null }>; tarifa_actual: string | null }>(
+    `/domicilios/${id}/facturas/importes`, [facs.datos, dom.datos?.tarifa_actual_id],
+  );
   const consumo = useDatos<ResumenConsumo>(`/domicilios/${id}/consumo`);
   const [generando, setGenerando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -26,7 +29,10 @@ export default function DomicilioPage() {
   const tarifa = tarifas?.find((t) => t.id === d.tarifa_actual_id);
   const lista = facs.datos ?? [];
   const totalKwh = lista.reduce((a, f) => a + f.kwh_p1 + f.kwh_p2 + f.kwh_p3, 0);
-  const totalEur = lista.reduce((a, f) => a + (f.importe_total ?? 0), 0);
+  const importeDe = (f: Factura) => f.importe_total ?? calc.datos?.importes[f.id]?.total ?? null;
+  const totalEur = lista.reduce((a, f) => a + (importeDe(f) ?? 0), 0);
+  const hayCalculados = lista.some((f) => f.importe_total == null && calc.datos?.importes[f.id]);
+  const sinImporte = lista.filter((f) => importeDe(f) == null).length;
 
   const mesesCompletos = consumo.datos?.meses.filter((m) => m.completo).length ?? 0;
   const crearDesdeConsumo = async () => {
@@ -67,10 +73,22 @@ export default function DomicilioPage() {
         <Dato t="Tarifa actual" v={tarifa ? tarifa.nombre : "—"} s={tarifa?.comercializadora} />
         <Dato t="Potencia contratada" v={`${num(d.potencia_p1_kw, 2)} / ${num(d.potencia_p2_kw, 2)} kW`} s="P1 punta / P2 valle" />
         <Dato t="Consumo registrado" v={`${num(totalKwh)} kWh`} s={`${lista.length} facturas`} />
-        <Dato t="Importe registrado" v={eur(totalEur)} s={d.distribuidora ?? undefined} />
+        <Dato
+          t={hayCalculados ? "Importe (real + calculado)" : "Importe registrado"}
+          v={eur(totalEur)}
+          s={hayCalculados ? `≈ calculado con ${calc.datos?.tarifa_actual ?? "la tarifa de cada factura"}` : d.distribuidora ?? undefined}
+        />
       </div>
 
       {aviso && <div className="mb-4"><Aviso tipo="ok">{aviso}</Aviso></div>}
+      {lista.length > 0 && sinImporte > 0 && calc.datos && !calc.datos.tarifa_actual && (
+        <div className="mb-4">
+          <Aviso>
+            {sinImporte} factura{sinImporte === 1 ? "" : "s"} sin importe. Indica la <strong>tarifa actual</strong> del domicilio
+            (botón «Editar») para ver lo que costaron con ella, o edita cada factura para poner lo que pagaste.
+          </Aviso>
+        </div>
+      )}
       {lista.length === 0 ? (
         <Vacio icono={<Receipt />} titulo="Sin facturas">
           {mesesCompletos > 0 ? (
@@ -107,7 +125,20 @@ export default function DomicilioPage() {
                     <td className="num">{num(f.kwh_p2)}</td>
                     <td className="num">{num(f.kwh_p3)}</td>
                     <td className="num font-medium">{num(f.kwh_p1 + f.kwh_p2 + f.kwh_p3)}</td>
-                    <td className="num font-medium">{eur(f.importe_total)}</td>
+                    <td className="num font-medium">
+                      {f.importe_total != null ? (
+                        eur(f.importe_total)
+                      ) : calc.datos?.importes[f.id] ? (
+                        <span
+                          className="font-normal italic text-zinc-500"
+                          title={`Calculado con «${calc.datos.importes[f.id].tarifa}»${calc.datos.importes[f.id].precision === "horario" ? ", hora a hora" : ""}. Edita la factura para poner lo que pagaste.`}
+                        >
+                          ≈ {eur(calc.datos.importes[f.id].total)}
+                        </span>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                     <td className="whitespace-nowrap text-right">
                       <button className="btn p-1.5" onClick={() => setFactura(f)} aria-label="Editar"><Pencil size={15} /></button>
                       <button className="btn-peligro p-1.5" onClick={() => borrarFactura(f)} aria-label="Borrar"><Trash2 size={15} /></button>
