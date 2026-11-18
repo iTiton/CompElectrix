@@ -31,9 +31,10 @@ export default function ConsumoHorario({ domicilio, alCambiar }: { domicilio: Do
     setMensaje({
       tipo: "ok",
       texto: `${num(r.horas)} horas importadas desde ${origen}${r.desde ? ` (${fecha(r.desde)} – ${fecha(r.hasta)})` : ""}.`,
-      extra: r.avisos,
+      extra: [...r.avisos, "Para comparar tarifas, crea las facturas mensuales con el botón de abajo."],
     });
     recargar();
+    alCambiar();
   };
 
   const subir = async (f: File) => {
@@ -70,6 +71,7 @@ export default function ConsumoHorario({ domicilio, alCambiar }: { domicilio: Do
     await api.del(`/domicilios/${domicilio.id}/consumo`);
     setMensaje(null);
     recargar();
+    alCambiar();
   };
 
   const meses = datos?.meses.map((m) => ({ ...m, etiqueta: etiquetaMes(m.mes) })) ?? [];
